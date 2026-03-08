@@ -13,9 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,6 +29,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.vinceglb.filekit.dialogs.compose.rememberDirectoryPickerLauncher
 import io.github.vinceglb.filekit.path
+import kotlinx.coroutines.launch
 
 
 /**
@@ -42,7 +41,9 @@ fun rememberDirectoryPicker(
     title: String = "Select Directory",
     onResult: (java.io.File?) -> Unit // We convert PlatformDirectory -> Java File for you
 ): () -> Unit {
-    val launcher = rememberDirectoryPickerLauncher(title = title) { file ->
+    val launcher = rememberDirectoryPickerLauncher(
+        title = title,
+    ) { file ->
         // Convert FileKit's "PlatformDirectory" to a standard Java File for your backend
         val file = file?.path?.let { java.io.File(it) }
         onResult(file)
@@ -55,7 +56,7 @@ fun rememberDirectoryPicker(
 fun DashedDropZone(
     modifier: Modifier = Modifier,
     icon: ImageVector = Icons.Rounded.FolderOpen,
-    title: String = "Open Directory",
+    title: String = "Open Directory or Drop Files & Folders Here",
     subtitle: String = "Click to browse",
     onClick: () -> Unit
 ) {
@@ -140,4 +141,45 @@ fun Modifier.dashedBorder(
         style = stroke,
         cornerRadius = CornerRadius(cornerRadius.toPx())
     )
+}
+
+
+@Composable
+fun OpenDirectoryPanel(
+    modifier: Modifier = Modifier,
+    // Pass ViewModel action here
+    onDirectorySelected: (java.nio.file.Path) -> Unit
+) {
+    // 1. Setup the Picker
+    var isFileDialogOpened by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val openDir = rememberDirectoryPicker(
+        title = "Open Image Folder"
+    ) { file ->
+        if (file != null) {
+            onDirectorySelected(file.toPath())
+        }
+        isFileDialogOpened = false
+    }
+
+    // 2. Draw the UI
+    Column(
+        modifier = modifier.padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+
+        DashedDropZone(
+            title = "Open Image Directory or Drop Files & Folders Here",
+            subtitle = "Supports JPG, PNG, WEBP, etc.",
+            onClick = {
+                if (!isFileDialogOpened) {
+                    scope.launch {
+                        isFileDialogOpened = true
+                        openDir()
+                    }
+                }
+            } // <--- Just pass the launcher lambda!
+        )
+    }
 }

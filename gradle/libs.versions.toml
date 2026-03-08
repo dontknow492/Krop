@@ -16,6 +16,7 @@ kotlinx-serialization-json = "1.9.0"
 koin-bom = "4.1.1"  # Stable version
 napier = "2.7.1"
 reordable = "3.0.0"
+colorpicker = "1.1.3"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -62,6 +63,9 @@ koin-test = { module = "io.insert-koin:koin-test" }
 
 #
 naphier = { module = "io.github.aakira:napier", version.ref = "napier" }
+
+compose-colorpicker = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpicker" }
+
 
 
 

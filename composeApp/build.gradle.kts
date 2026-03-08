@@ -49,6 +49,8 @@ kotlin {
             implementation(libs.reordable.item)
             implementation(libs.naphier)
 
+            implementation(libs.compose.colorpicker)
+
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

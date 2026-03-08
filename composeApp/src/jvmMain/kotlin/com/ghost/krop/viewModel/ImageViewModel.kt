@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ghost.krop.models.DirectorySettings
 import com.ghost.krop.repository.ImageRepository
+import com.ghost.krop.repository.LoadFiles
 import com.ghost.krop.ui.components.ImageCardType
 import com.ghost.krop.utils.openFileInExplorer
 import io.github.aakira.napier.Napier
@@ -24,6 +25,7 @@ sealed interface ImageEvent {
     data class DeleteImages(val paths: List<Path>) : ImageEvent
     data class OpenInExplorer(val path: Path) : ImageEvent
     data class DirectorySettingChange(val setting: DirectorySettings) : ImageEvent
+    data class LoadFiles(val files: List<Path>, val folders: List<Path>) : ImageEvent
 }
 
 enum class ImageSort {
@@ -34,9 +36,10 @@ enum class SortDirection {
     ASCENDING, DESCENDING
 }
 
+
 data class ImageUiState(
     val isLoading: Boolean = false,
-    val currentDir: Path? = null,
+    val currentDir: LoadFiles? = null,
     val images: List<Path> = emptyList(),
     val searchQuery: String = "",
     val sortType: ImageSort = ImageSort.NAME,
@@ -59,7 +62,7 @@ class ImageViewModel(
 
     // --- Private Mutable States ---
     private val _rawImages = MutableStateFlow<List<Path>>(emptyList())
-    private val _currentDir = MutableStateFlow<Path?>(null)
+    private val _currentDir = MutableStateFlow<LoadFiles?>(null)
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
     private val _selectedImage = MutableStateFlow<Path?>(null)
@@ -135,7 +138,7 @@ class ImageViewModel(
     val uiState = combine(viewStateFlow, filterStateFlow, dataStateFlow) { viewArr, filterPair, dataArr ->
         ImageUiState(
             viewMode = viewArr[0] as ImageCardType,
-            currentDir = viewArr[1] as Path?,
+            currentDir = viewArr[1] as LoadFiles?,
             directorySettings = viewArr[2] as DirectorySettings,
             searchQuery = viewArr[3] as String,
             sortType = filterPair.first,
@@ -170,7 +173,13 @@ class ImageViewModel(
     // --- Intent Dispatcher ---
     fun onEvent(event: ImageEvent) {
         when (event) {
-            is ImageEvent.LoadImages -> _currentDir.update { event.directory }
+            is ImageEvent.LoadImages -> _currentDir.update {
+                LoadFiles(
+                    folders = listOf(event.directory),
+                    files = emptyList()
+                )
+            }
+
             is ImageEvent.SelectImage -> _selectedImage.update { event.path }
             is ImageEvent.Search -> _searchQuery.update { event.query }
             is ImageEvent.ChangeViewMode -> _viewMode.value = event.viewMode
@@ -198,11 +207,19 @@ class ImageViewModel(
                     }
                 }
             }
+
+            is ImageEvent.LoadFiles -> _currentDir.update {
+                LoadFiles(
+                    folders = event.folders,
+                    files = event.files
+                )
+            }
         }
     }
 
     // --- Core Logic ---
-    private fun loadImagesFromRepository(dir: Path, settings: DirectorySettings) {
+
+    private fun loadImagesFromRepository(files: LoadFiles, settings: DirectorySettings) {
         imageLoadJob?.cancel() // Cancel ongoing load if directory changes rapidly
         imageLoadJob = viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
@@ -211,7 +228,7 @@ class ImageViewModel(
 
             try {
                 imageRepository.getImages(
-                    root = dir.toFile(),
+                    request = files,
                     recursive = settings.isRecursive,
                     maxDepth = settings.maxDepth
                 ).collect { chunk ->
@@ -250,3 +267,5 @@ class ImageViewModel(
         Napier.v { "Removed ${paths.size} images from workspace" }
     }
 }
+
+

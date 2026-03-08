@@ -15,37 +15,46 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.awt.Cursor
 
 @Composable
 fun VerticalDraggableSplitter(
     modifier: Modifier = Modifier,
-    onResize: (Float) -> Unit, // Renamed for clarity
+    onResize: (Dp) -> Unit,
+    onDragStart: () -> Unit,
+    onDragEnd: () -> Unit,
     color: Color = MaterialTheme.colorScheme.outlineVariant
 ) {
-    // 1. Get the current screen density
     val density = LocalDensity.current
 
     Box(
         modifier = modifier
-            .width(10.dp)
+            .width(10.dp) // wide grab area
             .fillMaxHeight()
             .pointerHoverIcon(PointerIcon(Cursor(Cursor.E_RESIZE_CURSOR)))
             .draggable(
+                orientation = Orientation.Horizontal,
                 state = rememberDraggableState { deltaPixels ->
-                    // 2. CONVERSION: Pixels -> Dp
-                    // "deltaPixels" is how many physical dots the mouse moved.
-                    // We divide by density to get the "Dp" equivalent.
-                    val deltaDp = with(density) { deltaPixels.toDp().value }
+
+                    // Convert pixels -> dp
+                    val deltaDp = with(density) { deltaPixels.toDp() }
 
                     onResize(deltaDp)
                 },
-                orientation = Orientation.Horizontal
+                onDragStarted = {
+                    onDragStart()
+                },
+                onDragStopped = {
+                    onDragEnd()
+                }
             )
     ) {
         VerticalDivider(
-            modifier = Modifier.align(Alignment.Center),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .width(2.dp), // thin visible line
             color = color
         )
     }

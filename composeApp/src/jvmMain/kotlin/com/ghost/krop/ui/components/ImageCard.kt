@@ -10,7 +10,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInBrowser
@@ -25,7 +24,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
 import java.nio.file.Path
 import kotlin.io.path.name
 
@@ -320,49 +318,6 @@ private fun ImageDropMenu(
             }
         )
     }
-}
-
-@Composable
-private fun ImageThumbnail(
-    modifier: Modifier = Modifier,
-    path: Path,
-    contentScale: ContentScale = ContentScale.Crop,
-    loading: @Composable () -> Unit = {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp),
-                strokeWidth = 2.dp,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    },
-    error: @Composable () -> Unit = {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.BrokenImage,
-                contentDescription = "Error loading image",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    },
-) {
-    SubcomposeAsyncImage(
-        model = path.toFile(),
-        contentDescription = path.name,
-        contentScale = contentScale, // Crop to fill the square
-        modifier = modifier.fillMaxSize(),
-        loading = {
-            loading()
-        },
-        error = {
-            error()
-        }
-    )
 }
 
 

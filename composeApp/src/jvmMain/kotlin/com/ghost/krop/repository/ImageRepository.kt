@@ -8,13 +8,12 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import java.io.File
-import java.io.IOException
 import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.absolute
 import kotlin.io.path.extension
+import kotlin.io.path.isDirectory
+import kotlin.io.path.isRegularFile
 
 class ImageRepository(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
@@ -23,82 +22,139 @@ class ImageRepository(
 
     companion object {
         private val SUPPORTED_EXTENSIONS = setOf(
-            "jpg", "jpeg", "png", "webp", "bmp"
+            /* Common formats */"jpg", "jpeg", "jpe", "png", "webp", "bmp", "gif",
+            /* Modern formats */"heic", "heif", "avif",
+            /* Apple / camera */"tif", "tiff",
+            /* Vector */"svg",
+            /* Icons */"ico",
+            /* Rare but supported by Android decoders */"wbmp",
+            /* HDR / high precision */"hdr",
+            /* Some tools export these */"jfif", "pjpeg", "pjp"
         )
     }
 
+
     fun getImages(
-        root: File,
+        request: LoadFiles,
         recursive: Boolean = true,
         maxDepth: Int = Int.MAX_VALUE,
-        chunkSize: Int = 100,
+        chunkSize: Int = 100
     ): Flow<List<Path>> = flow {
 
-        Napier.v { "Starting dataset scan: ${root.absolutePath}" }
-
-        if (!root.exists()) {
-            Napier.e { "Directory does not exist: ${root.absolutePath}" }
-            throw IOException("Directory does not exist: ${root.absolutePath}")
-        }
-
-        if (!root.isDirectory) {
-            Napier.e { "Path is not a directory: ${root.absolutePath}" }
-            throw IOException("Path is not a directory: ${root.absolutePath}")
-        }
-
+        Napier.v { "Starting multi-source image scan" }
         val startTime = System.currentTimeMillis()
-        val depth = if (recursive) maxDepth else 1
+
+        // 1. Cache the context ONCE to avoid allocation overhead in the tight loops
+        val context = currentCoroutineContext()
 
         val buffer = mutableListOf<Path>()
         var totalFound = 0
 
-        Files.walk(root.toPath(), depth).use { paths ->
+        // ====================================================================
+        // OPTIMIZATION 1: INPUT SANITIZATION (Eliminates the need for 'visited' set)
+        // ====================================================================
 
-            val iterator = paths.iterator()
+        // Normalize folders and remove duplicates
+        val validFolders = request.folders
+            .filter { Files.exists(it) && it.isDirectory() }
+            .map { it.toAbsolutePath().normalize() }
+            .distinct()
 
-            while (iterator.hasNext()) {
-                currentCoroutineContext().ensureActive()
+        // If recursive, remove sub-folders if their parent is already in the list
+        val optimizedFolders = if (recursive) {
+            validFolders.filterNot { folder ->
+                validFolders.any { other -> folder != other && folder.startsWith(other) }
+            }
+        } else {
+            validFolders
+        }
 
-                val path = try {
-                    iterator.next()
-                } catch (e: UncheckedIOException) {
-                    // 2. Prevent crashes on locked/system folders
-                    Napier.w { "Skipping unreadable path: ${e.message}" }
-                    continue
-                }
+        // Keep only files that aren't already going to be scanned by our 'optimizedFolders'
+        val optimizedFiles = request.files
+            .filter { Files.exists(it) && it.isRegularFile() }
+            .map { it.toAbsolutePath().normalize() }
+            .distinct()
+            .filterNot { file ->
+                optimizedFolders.any { folder -> file.startsWith(folder) }
+            }
 
-                if (!Files.isRegularFile(path)) continue
+        // ====================================================================
 
-
-                if (path.extension.lowercase() !in SUPPORTED_EXTENSIONS) continue
-
-                Napier.v { "Image found: ${path.absolute()}" }
-
-                buffer.add(path)
-                totalFound++
-
-                if (buffer.size >= chunkSize) {
-
-                    Napier.v {
-                        "Emitting chunk of ${buffer.size} images (total: $totalFound)"
-                    }
-
-                    emit(buffer.toList())
-                    buffer.clear()
-                }
+        suspend fun tryEmitChunk() {
+            if (buffer.size >= chunkSize) {
+                emit(buffer.toList())
+                buffer.clear()
             }
         }
 
+        fun isValidImage(path: Path): Boolean {
+            return path.extension.lowercase() in SUPPORTED_EXTENSIONS
+        }
+
+        /* ---------------- EXPLICIT FILES ---------------- */
+
+        for (file in optimizedFiles) {
+            context.ensureActive()
+
+            if (isValidImage(file)) {
+                buffer.add(file)
+                totalFound++
+                tryEmitChunk()
+            }
+        }
+
+        /* ---------------- FOLDERS ---------------- */
+
+        val depth = if (recursive) maxDepth else 1
+
+        for (folder in optimizedFolders) {
+            context.ensureActive()
+
+            try {
+                Files.walk(folder, depth).use { paths ->
+                    val iterator = paths.iterator()
+                    var iterations = 0
+
+                    while (iterator.hasNext()) {
+                        // OPTIMIZATION 2: Only check cancellation every 50 files to save CPU
+                        if (++iterations % 50 == 0) context.ensureActive()
+
+                        val path = try {
+                            iterator.next()
+                        } catch (e: UncheckedIOException) {
+                            Napier.w { "Unreadable path inside $folder: ${e.message}" }
+                            continue
+                        }
+
+                        if (!Files.isRegularFile(path)) continue
+                        if (!isValidImage(path)) continue
+
+                        // We no longer need to normalize or check `visited.add()` here!
+                        buffer.add(path)
+                        totalFound++
+                        tryEmitChunk()
+                    }
+                }
+            } catch (e: Exception) {
+                // Failsafe just in case Files.walk crashes on the root folder
+                Napier.e(e) { "Failed to walk directory: $folder" }
+            }
+        }
+
+        /* ---------------- FINAL CHUNK ---------------- */
+
         if (buffer.isNotEmpty()) {
-            Napier.v { "Emitting final chunk of ${buffer.size} images" }
             emit(buffer.toList())
         }
 
         val duration = System.currentTimeMillis() - startTime
-
-        Napier.i {
-            "Dataset scan finished. Total images: $totalFound | Time: ${duration}ms"
-        }
+        Napier.i { "Image scan finished. Total images: $totalFound | Time: ${duration}ms" }
 
     }.flowOn(ioDispatcher)
 }
+
+
+data class LoadFiles(
+    val files: List<Path>,
+    val folders: List<Path>
+)

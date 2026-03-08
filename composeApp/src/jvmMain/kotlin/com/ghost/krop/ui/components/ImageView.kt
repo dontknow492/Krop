@@ -1,10 +1,12 @@
 package com.ghost.krop.ui.components
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BrokenImage
 import androidx.compose.material.icons.rounded.BrokenImage
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -20,6 +22,8 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Precision
 import java.io.File
+import java.nio.file.Path
+import kotlin.io.path.name
 
 @Composable
 fun ImageView(
@@ -76,4 +80,49 @@ fun ImageView(
             }
         )
     }
+}
+
+
+@Composable
+fun ImageThumbnail(
+    modifier: Modifier = Modifier,
+    path: Path,
+    contentScale: ContentScale = ContentScale.Crop,
+    contentDescription: String? = null, // in case of null it will be set to path.name
+    loading: @Composable () -> Unit = {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    },
+    error: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.BrokenImage,
+                contentDescription = contentDescription ?: path.name,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    },
+) {
+    SubcomposeAsyncImage(
+        model = path.toFile(),
+        contentDescription = path.name,
+        contentScale = contentScale, // Crop to fill the square
+        modifier = modifier.fillMaxSize(),
+        loading = {
+            loading()
+        },
+        error = {
+            error()
+        }
+    )
 }

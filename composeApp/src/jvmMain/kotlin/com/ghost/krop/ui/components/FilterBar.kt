@@ -5,11 +5,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.List
 import androidx.compose.material.icons.automirrored.rounded.Sort
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.ghost.krop.models.DirectorySettings
+import com.ghost.krop.repository.LoadFiles
 import com.ghost.krop.viewModel.ImageSort
 import com.ghost.krop.viewModel.SortDirection
 import kotlinx.coroutines.launch
@@ -35,12 +39,12 @@ fun FilterBar(
     onImageSortChange: (ImageSort) -> Unit,
     sortOrder: SortDirection,
     onSortDirectionChange: (SortDirection) -> Unit,
-    currentDir: Path?,
+    currentDir: LoadFiles?,
     directorySettings: DirectorySettings,
     onDirectorySettingChange: (DirectorySettings) -> Unit,
     onClear: () -> Unit,
     onRefresh: () -> Unit,
-    onFolderClick: () -> Unit,
+    onFolderClick: (Path) -> Unit,
     onLoadDirectory: (Path) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -48,7 +52,6 @@ fun FilterBar(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
 
         val isCompact = maxWidth < 600.dp
@@ -144,13 +147,13 @@ fun FilterBar(
 @Composable
 fun DirectorySection(
     modifier: Modifier = Modifier,
-    currentDir: Path?,
+    currentDir: LoadFiles?,
     // Use the simplified data class
     currentSettings: DirectorySettings = DirectorySettings(),
     onClear: () -> Unit,
     onRefresh: () -> Unit,
     refreshing: Boolean = false,
-    onFolderClick: () -> Unit,
+    onFolderClick: (Path) -> Unit,
     onLoadDirectory: (Path) -> Unit,
     onUpdateSettings: (DirectorySettings) -> Unit
 ) {
@@ -234,13 +237,14 @@ fun DirectorySection(
 
 @Composable
 fun DirectorySettingsDialog(
-    currentDir: Path?,
+    currentDir: LoadFiles?,
     settings: DirectorySettings,
     onDismiss: () -> Unit,
-    onFolderClick: () -> Unit,
+    onFolderClick: (Path) -> Unit,
     onApply: (DirectorySettings) -> Unit
 ) {
     var tempSettings by remember { mutableStateOf(settings) }
+    var expanded by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -281,30 +285,13 @@ fun DirectorySettingsDialog(
 
                 // --- 1. Current Path Indicator ---
                 // Only show if a directory is actually selected
-                if (currentDir != null) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-
-                        Text(
-                            text = "SELECTED PATH",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            PathSelector(
-                                label = null,
-                                path = currentDir,
-                                onClick = onFolderClick,
-                                onFolderClick = onFolderClick,
-                            )
-
-                        }
-                    }
-                }
+                SelectedPathsDropdown(
+                    currentDir = currentDir,
+                    expanded = expanded,
+                    onExpandToggle = { expanded = !expanded },
+                    onFolderClick = onFolderClick,
+                    onFileClick = {}
+                )
 
                 // --- 2. Recursion Logic (The Main Logic) ---
                 Column(
@@ -393,6 +380,108 @@ fun DirectorySettingsDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = { onApply(tempSettings); onDismiss() }) {
                         Text("Apply")
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun SelectedPathsDropdown(
+    currentDir: LoadFiles?,
+    expanded: Boolean,
+    onExpandToggle: () -> Unit,
+    onFolderClick: (Path) -> Unit,
+    onFileClick: (Path) -> Unit
+) {
+
+    if (currentDir == null) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+
+        Text(
+            text = "SELECTED PATH",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold
+        )
+
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Column {
+
+                /* ---------- HEADER ---------- */
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onExpandToggle() }
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+
+                    val folderCount = currentDir.folders.size
+                    val fileCount = currentDir.files.size
+
+                    Text(
+                        text = "$folderCount folders • $fileCount files",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+
+                    Icon(
+                        imageVector = if (expanded)
+                            Icons.Default.ExpandLess
+                        else
+                            Icons.Default.ExpandMore,
+                        contentDescription = null
+                    )
+                }
+
+                /* ---------- DROPDOWN CONTENT ---------- */
+
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp)
+                    ) {
+
+                        /* -------- FOLDERS -------- */
+
+                        currentDir.folders.forEach { folder ->
+
+                            PathSelector(
+                                label = "Folder",
+                                path = folder,
+                                onClick = { onFolderClick(folder) },
+                                onFolderClick = { onFolderClick(folder) }
+                            )
+                        }
+
+                        /* -------- FILES -------- */
+
+                        currentDir.files.forEach { file ->
+
+                            PathSelector(
+                                label = "File",
+                                path = file,
+                                onClick = { onFileClick(file) },
+                                onFolderClick = { }
+                            )
+                        }
                     }
                 }
             }
