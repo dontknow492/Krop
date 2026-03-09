@@ -7,6 +7,8 @@ import com.ghost.krop.repository.ImageRepository
 import com.ghost.krop.repository.LoadFiles
 import com.ghost.krop.ui.components.ImageCardType
 import com.ghost.krop.utils.openFileInExplorer
+import com.ghost.krop.viewModel.ImageSideEffect.ShowError
+import com.ghost.krop.viewModel.ImageSideEffect.ShowToast
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -26,6 +28,8 @@ sealed interface ImageEvent {
     data class OpenInExplorer(val path: Path) : ImageEvent
     data class DirectorySettingChange(val setting: DirectorySettings) : ImageEvent
     data class LoadFiles(val files: List<Path>, val folders: List<Path>) : ImageEvent
+    data object NextImage : ImageEvent
+    data object PreviousImage : ImageEvent
 }
 
 enum class ImageSort {
@@ -193,7 +197,7 @@ class ImageViewModel(
 
             is ImageEvent.ClearImages -> {
                 clearWorkspace()
-                viewModelScope.launch { _sideEffect.send(ImageSideEffect.ShowToast("Workspace cleared")) }
+                viewModelScope.launch { _sideEffect.send(ShowToast("Workspace cleared")) }
             }
 
             is ImageEvent.OpenInExplorer -> {
@@ -203,7 +207,7 @@ class ImageViewModel(
                     } catch (e: Exception) {
                         val errorMsg = "Failed to open in explorer: ${e.message}"
                         Napier.e(errorMsg, e)
-                        _sideEffect.send(ImageSideEffect.ShowError(errorMsg))
+                        _sideEffect.send(ShowError(errorMsg))
                     }
                 }
             }
@@ -213,6 +217,36 @@ class ImageViewModel(
                     folders = event.folders,
                     files = event.files
                 )
+            }
+
+            ImageEvent.NextImage -> {
+
+                val list = uiState.value.images
+                val current = uiState.value.selectedImage
+
+                if (list.isNotEmpty() && current != null) {
+
+                    val index = list.indexOf(current)
+
+                    if (index != -1 && index < list.lastIndex) {
+                        _selectedImage.update { list[index + 1] }
+                    }
+                }
+            }
+
+            ImageEvent.PreviousImage -> {
+
+                val list = uiState.value.images
+                val current = uiState.value.selectedImage
+
+                if (list.isNotEmpty() && current != null) {
+
+                    val index = list.indexOf(current)
+
+                    if (index > 0) {
+                        _selectedImage.update { list[index - 1] }
+                    }
+                }
             }
         }
     }
@@ -239,7 +273,7 @@ class ImageViewModel(
                 val errorMsg = "Failed to load dataset: ${e.message}"
                 Napier.e(errorMsg, e)
                 _error.value = errorMsg
-                _sideEffect.send(ImageSideEffect.ShowError(errorMsg))
+                _sideEffect.send(ShowError(errorMsg))
             } finally {
                 _isLoading.value = false
             }

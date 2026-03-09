@@ -4,45 +4,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghost.krop.core.*
+import com.ghost.krop.models.Annotation
+import com.ghost.krop.models.CanvasMode
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.nio.file.Path
-import java.util.*
 
 /* ----------------------------- */
 /* Annotation Models */
 /* ----------------------------- */
-
-sealed interface Annotation {
-    val id: String
-    val label: String
-    val color: Color
-
-    data class BoundingBox(
-        override val id: String = UUID.randomUUID().toString(),
-        val xMin: Float,
-        val yMin: Float,
-        val xMax: Float,
-        val yMax: Float,
-        override val label: String = "Object",
-        override val color: Color = Color.Green
-    ) : Annotation
-
-    data class Polygon(
-        override val id: String = UUID.randomUUID().toString(),
-        val points: List<Offset>,
-        override val label: String = "Object",
-        override val color: Color = Color.Green
-    ) : Annotation
-
-    data class Polyline(
-        override val id: String = UUID.randomUUID().toString(),
-        val points: List<Offset>,
-        override val label: String = "Object",
-        override val color: Color = Color.Green
-    ) : Annotation
-}
 
 data class HistoryState<T>(
     val past: List<T> = emptyList(),
@@ -58,11 +30,6 @@ sealed interface CanvasEvent {
     //
     data class SelectImage(val path: Path?) : CanvasEvent
 
-    // Drawing
-    data class StartDraw(val position: Offset) : CanvasEvent
-    data class UpdateDraw(val position: Offset) : CanvasEvent
-    data object EndDraw : CanvasEvent
-
     // Viewport
     data class Pan(val delta: Offset) : CanvasEvent
     data class Zoom(val scale: Float) : CanvasEvent
@@ -74,6 +41,7 @@ sealed interface CanvasEvent {
     // Management
     data class AddAnnotation(val annotation: Annotation) : CanvasEvent
     data class RemoveAnnotation(val id: String) : CanvasEvent
+    data class UpdateAnnotation(val annotation: Annotation) : CanvasEvent
     data object ClearCanvas : CanvasEvent
 
     // Navigation
@@ -103,18 +71,6 @@ sealed interface SideEffect {
 /* Canvas Mode */
 /* ----------------------------- */
 
-sealed interface CanvasMode {
-    sealed interface Tool : CanvasMode
-    data object RectangleTool : Tool
-    data object PolygonTool : Tool
-    data object PenTool : Tool
-
-    data object Pan : CanvasMode
-
-    data class Edit(val selectedId: String) : CanvasMode
-    data class Resize(val id: String, val handle: ResizeHandle) : CanvasMode
-}
-
 enum class ResizeHandle {
     TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
 }
@@ -127,7 +83,7 @@ data class CanvasUiState(
     val selectedImage: Path? = null,
     val scale: Float = 1f,
     val offset: Offset = Offset.Zero,
-    val mode: CanvasMode = CanvasMode.RectangleTool,
+    val mode: CanvasMode = CanvasMode.Draw.Shape.Rectangle,
     val startDrag: Offset? = null,
     val currentDrag: Offset? = null,
     val color: Color = Color.Green,
@@ -150,6 +106,10 @@ class AnnotatorViewModel : ViewModel() {
     )
 
     private val imageHistoryCache = mutableMapOf<Path, HistoryState<List<Annotation>>>()
+
+
+    var activeTool: CanvasTool? = null
+        private set
 
 
     // Exposed lists and helper states for the UI
@@ -179,9 +139,6 @@ class AnnotatorViewModel : ViewModel() {
 
     fun onEvent(event: CanvasEvent) {
         when (event) {
-            is CanvasEvent.StartDraw -> startDraw(event.position)
-            is CanvasEvent.UpdateDraw -> updateDraw(event.position)
-            CanvasEvent.EndDraw -> finishDraw()
 
             is CanvasEvent.Pan -> pan(event.delta)
             is CanvasEvent.Zoom -> zoom(event.scale)
@@ -190,7 +147,7 @@ class AnnotatorViewModel : ViewModel() {
 
             CanvasEvent.ResetZoom -> _uiState.update { it.copy(scale = 1f, offset = Offset.Zero) }
 
-            is CanvasEvent.ChangeMode -> changeMode(event.mode)
+            is CanvasEvent.ChangeMode -> setMode(event.mode)
 
             is CanvasEvent.AddAnnotation -> addAnnotation(event.annotation)
             is CanvasEvent.RemoveAnnotation -> deleteAnnotation(event.id)
@@ -204,6 +161,16 @@ class AnnotatorViewModel : ViewModel() {
 
             is CanvasEvent.ChangeColor -> _uiState.update { it.copy(color = event.color) }
             is CanvasEvent.SelectImage -> selectImage(event.path)
+
+            is CanvasEvent.UpdateAnnotation -> {
+                val currentList = _history.value.present
+                val newList = currentList.map { if (it.id == event.annotation.id) event.annotation else it }
+
+                // Only commit if something actually changed
+                if (currentList.any { it.id == event.annotation.id }) {
+                    commitNewState(newList)
+                }
+            }
         }
     }
 
@@ -272,6 +239,47 @@ class AnnotatorViewModel : ViewModel() {
     /* Drawing Logic */
     /* ----------------------------- */
 
+    fun setMode(mode: CanvasMode) {
+        // 1. Update the UI state
+        _uiState.update { it.copy(mode = mode) }
+
+        // 2. Clean up the previous tool (clears unfinished previews/points)
+        activeTool?.onCancel()
+
+        // 3. Grab the current selected color
+        val currentColor = _uiState.value.color
+
+        // 4. Instantiate the correct CanvasTool based on the new mode hierarchy
+        activeTool = when (mode) {
+
+            /* --- Geometric Shapes --- */
+            CanvasMode.Draw.Shape.Rectangle ->
+                RectangleTool(currentColor, ::commit)
+
+            CanvasMode.Draw.Shape.Circle ->
+                CircleTool(currentColor, ::commit)
+
+            CanvasMode.Draw.Shape.Oval ->
+                OvalTool(currentColor, ::commit)
+
+
+            /* --- Path & Line Tools --- */
+            CanvasMode.Draw.Path.Polygon ->
+                PolygonTool(currentColor, ::commit)
+
+            CanvasMode.Draw.Path.Line ->
+                LineTool(currentColor, ::commit)
+
+
+            /* --- Non-Drawing Modes (Pan, Edit, Resize) --- */
+            else -> null
+        }
+    }
+
+    private fun commit(annotation: Annotation) {
+        commitNewState(_history.value.present + annotation)
+    }
+
     private fun startDraw(position: Offset) {
         _uiState.update {
             it.copy(
@@ -284,62 +292,6 @@ class AnnotatorViewModel : ViewModel() {
     private fun updateDraw(position: Offset) {
         _uiState.update {
             it.copy(currentDrag = position)
-        }
-    }
-
-    private fun finishDraw() {
-        val state = _uiState.value
-        val start = state.startDrag ?: return
-        val end = state.currentDrag ?: return
-
-        when (state.mode) {
-
-            CanvasMode.RectangleTool -> {
-
-                val box = Annotation.BoundingBox(
-                    xMin = minOf(start.x, end.x),
-                    yMin = minOf(start.y, end.y),
-                    xMax = maxOf(start.x, end.x),
-                    yMax = maxOf(start.y, end.y),
-                    color = state.color
-                )
-
-                val width = box.xMax - box.xMin
-                val height = box.yMax - box.yMin
-
-                if (width > 5f && height > 5f) {
-                    commitNewState(_history.value.present + box)
-                }
-            }
-
-            CanvasMode.PolygonTool -> {
-
-                val polygon = Annotation.Polygon(
-                    points = listOf(start, end),
-                    color = state.color
-                )
-
-                commitNewState(_history.value.present + polygon)
-            }
-
-            CanvasMode.PenTool -> {
-
-                val line = Annotation.Polyline(
-                    points = listOf(start, end),
-                    color = state.color
-                )
-
-                commitNewState(_history.value.present + line)
-            }
-
-            else -> {}
-        }
-
-        _uiState.update {
-            it.copy(
-                startDrag = null,
-                currentDrag = null
-            )
         }
     }
 
@@ -367,9 +319,6 @@ class AnnotatorViewModel : ViewModel() {
     /* Canvas Viewport Movement */
     /* ----------------------------- */
 
-    private fun changeMode(mode: CanvasMode) {
-        _uiState.update { it.copy(mode = mode) }
-    }
 
     private fun pan(delta: Offset) {
         _uiState.update {

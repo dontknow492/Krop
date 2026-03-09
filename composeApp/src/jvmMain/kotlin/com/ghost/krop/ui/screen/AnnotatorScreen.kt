@@ -2,7 +2,8 @@ package com.ghost.krop.ui.screen
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,31 +18,40 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.key.*
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerIcon.Companion.Crosshair
+import androidx.compose.ui.input.pointer.PointerIcon.Companion.Default
+import androidx.compose.ui.input.pointer.PointerIcon.Companion.Hand
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.ghost.krop.core.CanvasTool
+import com.ghost.krop.models.Annotation
+import com.ghost.krop.models.CanvasMode
+import com.ghost.krop.models.ShortcutRegistry
 import com.ghost.krop.ui.components.ColorPickerButton
 import com.ghost.krop.ui.components.ImageThumbnail
-import com.ghost.krop.viewModel.*
-import com.ghost.krop.viewModel.Annotation
-import org.koin.compose.viewmodel.koinViewModel
-import kotlin.math.abs
+import com.ghost.krop.viewModel.CanvasEvent
+import com.ghost.krop.viewModel.CanvasUiState
 
 @Composable
 fun AnnotatorScreen(
     modifier: Modifier = Modifier,
-    viewModel: AnnotatorViewModel = koinViewModel(),
+    uiState: CanvasUiState,
+    annotations: List<Annotation>,
+    canUndo: Boolean,
+    canRedo: Boolean,
+    activeTool: CanvasTool?,
+    onEvent: (CanvasEvent) -> Unit
 ) {
-    // Observe ViewModel States
-    val uiState by viewModel.uiState.collectAsState()
-    val annotations by viewModel.annotations.collectAsState()
-    val canUndo by viewModel.canUndo.collectAsState()
-    val canRedo by viewModel.canRedo.collectAsState()
-
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -55,72 +65,67 @@ fun AnnotatorScreen(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .pointerHoverIcon(getCursorForMode(uiState.mode))
                     // Re-bind pointerInput whenever the tool mode changes
-                    .pointerInput(uiState.mode) {
+                    .pointerInput(uiState.mode, activeTool) {
+
+                        // Helper function to map screen coordinates to the transformed canvas space
+                        fun mapToCanvas(screenPos: Offset): Offset {
+                            return Offset(
+                                x = (screenPos.x / uiState.scale) - uiState.offset.x,
+                                y = (screenPos.y / uiState.scale) - uiState.offset.y
+                            )
+                        }
+
                         when (uiState.mode) {
-                            // 1. Pan & Zoom Mode
-                            is CanvasMode.Pan -> {
+                            /* ------------------ PAN / ZOOM ------------------ */
+                            CanvasMode.Pan -> {
                                 detectTransformGestures { _, pan, zoom, _ ->
-                                    viewModel.onEvent(CanvasEvent.Zoom(zoom))
-                                    // Adjust pan speed by scale to keep it consistent
-                                    viewModel.onEvent(CanvasEvent.Pan(pan / uiState.scale))
+                                    onEvent(CanvasEvent.Zoom(zoom))
+                                    // Note: Pan usually needs to be divided by scale to stay consistent
+                                    onEvent(CanvasEvent.Pan(pan / uiState.scale))
                                 }
                             }
-                            // 2. Drawing Mode
-                            is CanvasMode.Tool -> {
-                                detectDragGestures(
-                                    onDragStart = { offset ->
-                                        viewModel.onEvent(CanvasEvent.StartDraw(offset))
-                                    },
-                                    onDrag = { change, _ ->
-                                        viewModel.onEvent(CanvasEvent.UpdateDraw(change.position))
-                                    },
-                                    onDragEnd = {
-                                        viewModel.onEvent(CanvasEvent.EndDraw)
-                                    },
-                                    onDragCancel = {
-                                        viewModel.onEvent(CanvasEvent.EndDraw)
-                                    }
-                                )
+
+                            /* ------------------ DRAWING TOOLS (Shapes & Paths) ------------------ */
+                            is CanvasMode.Draw -> {
+                                awaitEachGesture {
+                                    // 1. Capture the initial touch down
+                                    val downEvent = awaitFirstDown(requireUnconsumed = false)
+
+                                    // Map the screen touch to the actual canvas coordinates
+                                    val canvasPos = mapToCanvas(downEvent.position)
+                                    activeTool?.onPointerDown(canvasPos)
+
+                                    // 2. Track pointer lifecycle
+                                    do {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull()
+
+                                        if (change != null) {
+                                            val currentCanvasPos = mapToCanvas(change.position)
+
+                                            if (change.pressed) {
+                                                // Moving or holding
+                                                activeTool?.onPointerMove(currentCanvasPos)
+                                            } else {
+                                                // Released
+                                                activeTool?.onPointerUp(currentCanvasPos)
+                                            }
+
+                                            // Consume the event so parent containers don't try to scroll or intercept
+                                            change.consume()
+                                        }
+                                    } while (event.changes.any { it.pressed })
+                                }
                             }
 
-                            else -> {} // Handle Resize/Edit later
-                        }
-                    }
-                    .onPreviewKeyEvent {
-                        if (it.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        when {
-                            it.key == Key.NumPad1 -> {
-                                viewModel.onEvent(CanvasEvent.ChangeMode(CanvasMode.RectangleTool))
-                                true
+                            /* ------------------ SELECTION / EDITING ------------------ */
+                            is CanvasMode.Edit -> {
+                                // You could use detectTapGestures here to select different annotations
                             }
 
-                            it.key == Key.NumPad2 -> {
-                                viewModel.onEvent(CanvasEvent.ChangeMode(CanvasMode.PolygonTool))
-                                true
-                            }
-
-                            it.key == Key.NumPad3 -> {
-                                viewModel.onEvent(CanvasEvent.ChangeMode(CanvasMode.PenTool))
-                                true
-                            }
-
-                            it.key == Key.P -> {
-                                viewModel.onEvent(CanvasEvent.ChangeMode(CanvasMode.Pan))
-                                true
-                            }
-
-                            it.isCtrlPressed && it.key == Key.Z -> {
-                                viewModel.onEvent(CanvasEvent.Undo)
-                                true
-                            }
-
-                            it.isCtrlPressed && it.key == Key.Y -> {
-                                viewModel.onEvent(CanvasEvent.Redo)
-                                true
-                            }
-
-                            else -> false
+                            else -> {}
                         }
                     }
             ) {
@@ -151,6 +156,7 @@ fun AnnotatorScreen(
                     AnnotationCanvas(
                         annotations = annotations,
                         uiState = uiState,
+                        activeTool = activeTool,
                         modifier = Modifier.fillMaxSize()
                     )
 
@@ -166,7 +172,7 @@ fun AnnotatorScreen(
                 selectedColor = uiState.color,
                 canUndo = canUndo,
                 canRedo = canRedo,
-                onEvent = viewModel::onEvent
+                onEvent = onEvent
             )
 
             // UI Overlay: Heads Up Display (Top Right)
@@ -185,12 +191,12 @@ fun AnnotatorScreen(
 private fun AnnotationCanvas(
     annotations: List<Annotation>,
     uiState: CanvasUiState,
+    activeTool: CanvasTool?,
     modifier: Modifier = Modifier,
 ) {
 
     Canvas(modifier = modifier.fillMaxSize()) {
 
-        // Keep stroke width visually consistent regardless of zoom
         val stroke = 3f / uiState.scale
 
         /* ----------------------------- */
@@ -202,7 +208,6 @@ private fun AnnotationCanvas(
             when (annotation) {
 
                 is Annotation.BoundingBox -> {
-
                     drawRect(
                         color = annotation.color,
                         topLeft = Offset(annotation.xMin, annotation.yMin),
@@ -223,13 +228,11 @@ private fun AnnotationCanvas(
                             val first = annotation.points.first()
                             moveTo(first.x, first.y)
 
-                            annotation.points
-                                .drop(1)
-                                .forEach { point ->
-                                    lineTo(point.x, point.y)
-                                }
+                            annotation.points.drop(1).forEach { point ->
+                                lineTo(point.x, point.y)
+                            }
 
-                            close() // polygons are closed
+                            close()
                         }
 
                         drawPath(
@@ -240,28 +243,31 @@ private fun AnnotationCanvas(
                     }
                 }
 
-                is Annotation.Polyline -> {
+                is Annotation.Circle -> {
+                    drawCircle(
+                        color = annotation.color,
+                        radius = annotation.radius,
+                        center = annotation.center,
+                        style = Stroke(width = stroke)
+                    )
+                }
 
-                    if (annotation.points.size >= 2) {
+                is Annotation.Oval -> {
+                    drawOval(
+                        color = annotation.color,
+                        topLeft = Offset(annotation.xMin, annotation.yMin),
+                        size = Size(annotation.xMax - annotation.xMin, annotation.yMax - annotation.yMin),
+                        style = Stroke(width = stroke)
+                    )
+                }
 
-                        val path = Path().apply {
-
-                            val first = annotation.points.first()
-                            moveTo(first.x, first.y)
-
-                            annotation.points
-                                .drop(1)
-                                .forEach { point ->
-                                    lineTo(point.x, point.y)
-                                }
-                        }
-
-                        drawPath(
-                            path = path,
-                            color = annotation.color,
-                            style = Stroke(width = stroke)
-                        )
-                    }
+                is Annotation.Line -> {
+                    drawLine(
+                        color = annotation.color,
+                        start = annotation.start,
+                        end = annotation.end,
+                        strokeWidth = stroke
+                    )
                 }
             }
         }
@@ -270,60 +276,7 @@ private fun AnnotationCanvas(
         /* Active Drawing Feedback */
         /* ----------------------------- */
 
-        val start = uiState.startDrag
-        val current = uiState.currentDrag
-
-        if (start != null && current != null) {
-
-            when (uiState.mode) {
-
-                CanvasMode.RectangleTool -> {
-
-                    drawRect(
-                        color = Color.Yellow,
-                        topLeft = Offset(
-                            minOf(start.x, current.x),
-                            minOf(start.y, current.y)
-                        ),
-                        size = Size(
-                            abs(current.x - start.x),
-                            abs(current.y - start.y)
-                        ),
-                        style = Stroke(
-                            width = stroke,
-                            pathEffect = PathEffect.dashPathEffect(
-                                floatArrayOf(
-                                    10f / uiState.scale,
-                                    10f / uiState.scale
-                                )
-                            )
-                        )
-                    )
-                }
-
-                CanvasMode.PolygonTool -> {
-
-                    drawLine(
-                        color = Color.Yellow,
-                        start = start,
-                        end = current,
-                        strokeWidth = stroke
-                    )
-                }
-
-                CanvasMode.PenTool -> {
-
-                    drawLine(
-                        color = Color.Cyan,
-                        start = start,
-                        end = current,
-                        strokeWidth = stroke
-                    )
-                }
-
-                else -> {}
-            }
-        }
+        activeTool?.drawPreview(this)
     }
 }
 
@@ -336,8 +289,8 @@ private fun AnnotatorToolbar(
     canRedo: Boolean,
     onEvent: (CanvasEvent) -> Unit
 ) {
-
-    var toolMenuExpanded by remember { mutableStateOf(false) }
+    var shapeMenuExpanded by remember { mutableStateOf(false) }
+    var pathMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
         modifier = modifier,
@@ -345,7 +298,6 @@ private fun AnnotatorToolbar(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
         shadowElevation = 8.dp
     ) {
-
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -353,91 +305,101 @@ private fun AnnotatorToolbar(
         ) {
 
             /* ---------------- Move Section ---------------- */
-
             ModeButton(
                 icon = Icons.Default.PanTool,
-                description = "Pan (P)",
+                description = "Pan ${ShortcutRegistry.getLabelForMode(CanvasMode.Pan) ?: ""}",
                 isSelected = currentMode is CanvasMode.Pan,
                 onClick = { onEvent(CanvasEvent.ChangeMode(CanvasMode.Pan)) }
             )
 
-            VerticalDivider(
-                modifier = Modifier
-                    .size(width = 1.dp, height = 32.dp)
-                    .background(
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
-            )
+            VerticalDividerLine()
 
-            /* ---------------- Draw Tool Section ---------------- */
-
+            /* ---------------- Shape Tools ---------------- */
             Box {
-
                 ModeButton(
-                    icon = when (currentMode) {
-                        CanvasMode.RectangleTool -> Icons.Default.CropSquare
-                        CanvasMode.PolygonTool -> Icons.Default.Polyline
-                        CanvasMode.PenTool -> Icons.Default.Edit
-                        else -> Icons.Default.CropSquare
-                    },
-                    description = "Drawing Tools",
-                    isSelected = currentMode !is CanvasMode.Pan,
-                    onClick = { toolMenuExpanded = true }
+                    icon = getShapeIcon(currentMode),
+                    description = "Shape Tools",
+                    isSelected = currentMode is CanvasMode.Draw.Shape,
+                    onClick = { shapeMenuExpanded = true }
                 )
 
                 DropdownMenu(
-                    expanded = toolMenuExpanded,
-                    onDismissRequest = { toolMenuExpanded = false }
+                    expanded = shapeMenuExpanded,
+                    onDismissRequest = { shapeMenuExpanded = false }
                 ) {
+                    ToolMenuItem(
+                        text = "Rectangle",
+                        mode = CanvasMode.Draw.Shape.Rectangle,
+                        icon = Icons.Default.CropSquare
+                    ) {
+                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Rectangle))
+                        shapeMenuExpanded = false
+                    }
 
-                    DropdownMenuItem(
-                        text = { Text("Rectangle (1)") },
-                        leadingIcon = { Icon(Icons.Default.CropSquare, null) },
-                        onClick = {
-                            onEvent(CanvasEvent.ChangeMode(CanvasMode.RectangleTool))
-                            toolMenuExpanded = false
-                        }
-                    )
+                    ToolMenuItem(
+                        text = "Circle",
+                        mode = CanvasMode.Draw.Shape.Circle,
+                        icon = Icons.Default.RadioButtonUnchecked
+                    ) {
+                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Circle))
+                        shapeMenuExpanded = false
+                    }
 
-                    DropdownMenuItem(
-                        text = { Text("Polygon (2)") },
-                        leadingIcon = { Icon(Icons.Default.Polyline, null) },
-                        onClick = {
-                            onEvent(CanvasEvent.ChangeMode(CanvasMode.PolygonTool))
-                            toolMenuExpanded = false
-                        }
-                    )
-
-                    DropdownMenuItem(
-                        text = { Text("Pen (3)") },
-                        leadingIcon = { Icon(Icons.Default.Edit, null) },
-                        onClick = {
-                            onEvent(CanvasEvent.ChangeMode(CanvasMode.PenTool))
-                            toolMenuExpanded = false
-                        }
-                    )
+                    ToolMenuItem(
+                        text = "Oval",
+                        mode = CanvasMode.Draw.Shape.Oval,
+                        icon = Icons.Default.LensBlur
+                    ) {
+                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Oval))
+                        shapeMenuExpanded = false
+                    }
                 }
             }
 
-            /* ---------------- Color Picker ---------------- */
-
+            /* ---------------- Path Tools ---------------- */
             Box {
-                ColorPickerButton(
-                    color = selectedColor,
-                    onColorSelected = { onEvent(CanvasEvent.ChangeColor(it)) }
+                ModeButton(
+                    icon = getPathIcon(currentMode),
+                    description = "Path Tools",
+                    isSelected = currentMode is CanvasMode.Draw.Path,
+                    onClick = { pathMenuExpanded = true }
                 )
+
+                DropdownMenu(
+                    expanded = pathMenuExpanded,
+                    onDismissRequest = { pathMenuExpanded = false }
+                ) {
+                    ToolMenuItem(
+                        text = "Polygon",
+                        mode = CanvasMode.Draw.Path.Polygon,
+                        icon = Icons.Default.Polyline
+                    ) {
+                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Path.Polygon))
+                        pathMenuExpanded = false
+                    }
+
+                    ToolMenuItem(
+                        text = "Line",
+                        mode = CanvasMode.Draw.Path.Line,
+                        icon = Icons.Default.HorizontalRule
+                    ) {
+                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Path.Line))
+                        pathMenuExpanded = false
+                    }
+                }
             }
 
-            VerticalDivider(
-                modifier = Modifier
-                    .size(width = 1.dp, height = 32.dp)
-                    .background(
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
+            VerticalDividerLine()
+
+            /* ---------------- Color Picker ---------------- */
+            ColorPickerButton(
+                color = selectedColor,
+                onColorSelected = { onEvent(CanvasEvent.ChangeColor(it)) }
             )
 
-            /* ---------------- Zoom Section ---------------- */
+            VerticalDividerLine()
 
+            /* ---------------- Zoom Section ---------------- */
             IconButton(onClick = { onEvent(CanvasEvent.ZoomIn) }) {
                 Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In (+)")
             }
@@ -447,19 +409,12 @@ private fun AnnotatorToolbar(
             }
 
             IconButton(onClick = { onEvent(CanvasEvent.ResetZoom) }) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Reset Zoom")
+                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Reset Zoom (0)")
             }
 
-            VerticalDivider(
-                modifier = Modifier
-                    .size(width = 1.dp, height = 32.dp)
-                    .background(
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                    )
-            )
+            VerticalDividerLine()
 
             /* ---------------- History Section ---------------- */
-
             IconButton(
                 onClick = { onEvent(CanvasEvent.Undo) },
                 enabled = canUndo
@@ -483,6 +438,78 @@ private fun AnnotatorToolbar(
             }
         }
     }
+}
+
+/* -----------------------------------------------------------
+   Helper Composables & Functions
+   ----------------------------------------------------------- */
+
+@Composable
+private fun ToolMenuItem(
+    text: String,
+    mode: CanvasMode,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    val shortcutLabel = ShortcutRegistry.getLabelForMode(mode) ?: ""
+    DropdownMenuItem(
+        text = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text, modifier = Modifier.weight(1f))
+                if (shortcutLabel.isNotEmpty()) {
+                    Text(
+                        text = shortcutLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
+                }
+            }
+        },
+        leadingIcon = { Icon(icon, contentDescription = null) },
+        onClick = onClick
+    )
+}
+
+@Composable
+private fun VerticalDividerLine() {
+    VerticalDivider(
+        modifier = Modifier
+            .size(width = 1.dp, height = 32.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+    )
+}
+
+private fun getShapeIcon(mode: CanvasMode): ImageVector {
+    return when (mode) {
+        is CanvasMode.Draw.Shape.Circle -> Icons.Default.RadioButtonUnchecked
+        is CanvasMode.Draw.Shape.Oval -> Icons.Default.LensBlur
+        else -> Icons.Default.CropSquare // Default to Rectangle icon
+    }
+}
+
+private fun getPathIcon(mode: CanvasMode): ImageVector {
+    return when (mode) {
+        is CanvasMode.Draw.Path.Line -> Icons.Default.HorizontalRule
+        else -> Icons.Default.Polyline // Default to Polygon icon
+    }
+}
+
+
+/**
+ * Clean wrapper for DropdownMenuItem
+ */
+@Composable
+private fun ToolMenuItem(
+    text: String,
+    icon: ImageVector,
+    onClick: () -> Unit
+) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        leadingIcon = { Icon(icon, null) },
+        onClick = onClick
+    )
 }
 
 @Composable
@@ -516,6 +543,7 @@ private fun HUDOverlay(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         horizontalAlignment = Alignment.End
     ) {
+        // --- Scale Indicator ---
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
@@ -529,28 +557,50 @@ private fun HUDOverlay(
             )
         }
 
+        // --- Mode Indicator ---
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(8.dp))
                 .background(
                     when (mode) {
-                        is CanvasMode.Tool -> MaterialTheme.colorScheme.primary // Green for drawing
-                        is CanvasMode.Pan -> MaterialTheme.colorScheme.secondary // Blue for panning
-                        else -> MaterialTheme.colorScheme.tertiary // Default for other modes
+                        is CanvasMode.Draw -> MaterialTheme.colorScheme.primary
+                        is CanvasMode.Pan -> MaterialTheme.colorScheme.secondary
+                        is CanvasMode.Edit -> MaterialTheme.colorScheme.tertiary
+                        else -> Color.Gray
                     }
                 )
                 .padding(horizontal = 12.dp, vertical = 6.dp)
         ) {
             Text(
                 text = when (mode) {
-                    CanvasMode.RectangleTool -> "DRAWING"
-                    CanvasMode.Pan -> "PANNING"
-                    else -> "EDITING"
+                    is CanvasMode.Pan -> "PANNING"
+                    is CanvasMode.Edit -> "EDITING"
+                    is CanvasMode.Resize -> "RESIZING"
+                    is CanvasMode.Draw -> {
+                        // Get the specific name of the drawing tool
+                        getModeName(mode).uppercase()
+                    }
                 },
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = Color.White
             )
         }
+    }
+}
+
+/**
+ * Helper to get a human-readable name for the current mode
+ */
+private fun getModeName(mode: CanvasMode): String {
+    return when (mode) {
+        is CanvasMode.Draw.Shape.Rectangle -> "Rectangle"
+        is CanvasMode.Draw.Shape.Circle -> "Circle"
+        is CanvasMode.Draw.Shape.Oval -> "Oval"
+        is CanvasMode.Draw.Path.Polygon -> "Polygon"
+        is CanvasMode.Draw.Path.Line -> "Line"
+        CanvasMode.Pan -> "Pan"
+        is CanvasMode.Edit -> "Edit"
+        is CanvasMode.Resize -> "Resize"
     }
 }
 
@@ -592,5 +642,22 @@ private fun DotGridBackground() {
             }
             x += spacing
         }
+    }
+}
+
+
+fun getCursorForMode(mode: CanvasMode): PointerIcon {
+    return when (mode) {
+        // Drawing tools usually use a Crosshair for precision
+        is CanvasMode.Draw -> Crosshair
+
+        // Panning uses the Hand icon
+        is CanvasMode.Pan -> Hand
+
+        // Editing/Selection uses the standard Arrow
+        is CanvasMode.Edit -> Default
+
+        // Resizing uses specific directional arrows (system dependent)
+        is CanvasMode.Resize -> Hand // Or a specific resize icon
     }
 }

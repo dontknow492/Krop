@@ -1,8 +1,10 @@
 package com.ghost.krop
 
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import coil3.compose.setSingletonImageLoaderFactory
 import com.ghost.krop.di.appModule
 import com.ghost.krop.models.CoilImageLoader
@@ -28,7 +30,13 @@ fun main() = application {
     }
     Napier.i("Coil ImageLoader initialized")
 
+    val windowState = rememberWindowState(
+        width = 1200.dp,
+        height = 800.dp
+    )
+
     Window(
+        state = windowState,
         onCloseRequest = {
             Napier.i("Application exiting")
             exitApplication()
