@@ -3,43 +3,41 @@ package com.ghost.krop.repository.settings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(FlowPreview::class)
 class SettingsRepository(
     private val manager: SettingsManager,
-    private val scope: CoroutineScope // Pass a scope (usually the one from your ViewModel)
+    scope: CoroutineScope
 ) {
-    // 1. The private mutable state
+
     private val _settings = MutableStateFlow(manager.loadSettings())
 
-    // 2. The public "Read-Only" flow that the UI will observe
     val settings: StateFlow<AppSettings> = _settings.asStateFlow()
 
     init {
-        // 3. Automatic Saving: Whenever the flow changes, save it to disk!
         _settings
-            .drop(1) // Skip the first emission (the initial load)
-            .debounce(500) // Wait for 500ms of "silence" before saving (prevents lag while sliding)
+            .drop(1)
+            .debounce(300.seconds) // 5 minutes
             .onEach { updatedSettings ->
                 manager.saveSettings(updatedSettings)
             }
             .launchIn(scope)
     }
 
-    // 4. The update function (Aesthetic "Copy" pattern)
     fun updateSettings(transform: (AppSettings) -> AppSettings) {
-        val current = _settings.value
-        val updated = transform(current)
-        // We validate before pushing to the flow
-        _settings.value = SettingsValidator.validateAll(updated)
-//        _settings.value = updated
-
-    }
-
-    fun updateSessionSettings(transform: SessionState) {
-        _settings.update {
-            it.copy(sessionState = transform)
+        _settings.update { current ->
+            SettingsValidator.validateAll(transform(current))
         }
     }
 
+    fun updateSessionSettings(transform: (SessionState) -> SessionState) {
+        _settings.update {
+            it.copy(sessionState = transform(it.sessionState))
+        }
+    }
+
+    suspend fun flush() {
+        manager.saveSettings(_settings.value)
+    }
 }

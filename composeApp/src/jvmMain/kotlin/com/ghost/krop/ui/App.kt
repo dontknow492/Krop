@@ -1,6 +1,8 @@
 package com.ghost.krop.ui
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -11,10 +13,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ghost.krop.models.handleKeyboardInput
+import com.ghost.krop.models.UserAction
+import com.ghost.krop.models.handleGlobalKeyboardInput
 import com.ghost.krop.ui.components.CollapseDirection
 import com.ghost.krop.ui.components.Collapsible
 import com.ghost.krop.ui.components.VerticalDraggableSplitter
@@ -23,22 +30,26 @@ import com.ghost.krop.ui.screen.ImageScreen
 import com.ghost.krop.ui.screen.InspectorPanel
 import com.ghost.krop.viewModel.*
 import org.koin.compose.viewmodel.koinViewModel
+import java.nio.file.Path
 
 @Composable
 fun App(
     imageViewModel: ImageViewModel = koinViewModel(),
-    annotatorViewModel: AnnotatorViewModel = koinViewModel()
+    annotatorViewModel: AnnotatorViewModel = koinViewModel(),
+    settingsViewModel: SettingsViewModel = koinViewModel(),
 ) {
+
+    val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
+
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
 
     val snackbarHostState = remember { SnackbarHostState() }
 
-    var sidebarExpanded by rememberSaveable { mutableStateOf(true) }
-    var sidebarWidth by remember { mutableStateOf(400.dp) }
+
     var isSidebarResizing by remember { mutableStateOf(false) }
 
 
-    var sidebarExpandedInspector by rememberSaveable { mutableStateOf(true) }
-    var sidebarWidthInspector by remember { mutableStateOf(400.dp) }
     var isSidebarResizingInspector by remember { mutableStateOf(false) }
 
     val uiState by annotatorViewModel.uiState.collectAsState()
@@ -73,11 +84,14 @@ fun App(
 
 
         // pre loading image of development
+
     }
 
 
 
-    Scaffold { contentPadding ->
+    Scaffold(
+        modifier = Modifier
+    ) { contentPadding ->
 
         Row(
             modifier = Modifier
@@ -94,10 +108,10 @@ fun App(
             ) {
 
                 Collapsible(
-                    expanded = sidebarExpanded,
-                    onCollapsedToggle = { sidebarExpanded = !sidebarExpanded },
+                    expanded = settings.sessionState.imagePanelExpanded,
+                    onCollapsedToggle = { settingsViewModel.onEvent(SettingsEvent.ToggleImagePanelExpanded) },
                     isResizing = isSidebarResizing,
-                    size = sidebarWidth,
+                    size = settings.sessionState.imagePanelWidth,
                     showTitleWhenCollapsed = false,
                     title = {
                         Text(
@@ -131,12 +145,9 @@ fun App(
 
             /* Splitter */
 
-            AnimatedVisibility(visible = imageSelected && sidebarExpanded) {
+            AnimatedVisibility(visible = imageSelected && settings.sessionState.imagePanelExpanded) {
                 VerticalDraggableSplitter(
-                    onResize = { delta ->
-                        sidebarWidth = (sidebarWidth + delta)
-                            .coerceIn(160.dp, 500.dp)
-                    },
+                    onResize = { settingsViewModel.onEvent(SettingsEvent.ResizeImagePanels(it)) },
                     onDragStart = { isSidebarResizing = true },
                     onDragEnd = { isSidebarResizing = false }
                 )
@@ -149,10 +160,7 @@ fun App(
                 modifier = Modifier.weight(1f)
             ) {
                 AnnotatorScreen(
-                    modifier = Modifier.fillMaxHeight()
-                        .onKeyEvent { event ->
-                            handleKeyboardInput(event, annotatorViewModel::onEvent)
-                        },
+                    modifier = Modifier.fillMaxHeight(),
                     annotations = annotations,
                     onEvent = annotatorViewModel::onEvent,
                     canUndo = canUndo,
@@ -164,12 +172,9 @@ fun App(
 
 
             /* Splitter for Inspector */
-            AnimatedVisibility(visible = imageSelected && sidebarExpandedInspector) {
+            AnimatedVisibility(visible = imageSelected && settings.sessionState.inspectorPanelExpanded) {
                 VerticalDraggableSplitter(
-                    onResize = { delta ->
-                        sidebarWidthInspector = (sidebarWidthInspector - delta)
-                            .coerceIn(160.dp, 500.dp)
-                    },
+                    onResize = { settingsViewModel.onEvent(SettingsEvent.ResizeInspectorPanels(-it)) },
                     onDragStart = { isSidebarResizingInspector = true },
                     onDragEnd = { isSidebarResizingInspector = false }
                 )
@@ -182,11 +187,11 @@ fun App(
                 exit = fadeOut() + shrinkHorizontally()
             ) {
                 Collapsible(
-                    expanded = sidebarExpandedInspector,
-                    onCollapsedToggle = { sidebarExpandedInspector = !sidebarExpandedInspector },
+                    expanded = settings.sessionState.inspectorPanelExpanded,
+                    onCollapsedToggle = { settingsViewModel.onEvent(SettingsEvent.ToggleInspectorPanelExpanded) },
                     direction = CollapseDirection.END,
                     isResizing = isSidebarResizingInspector,
-                    size = sidebarWidthInspector,
+                    size = settings.sessionState.inspectorPanelWidth,
                     showTitleWhenCollapsed = false,
                     title = {
                         Row(

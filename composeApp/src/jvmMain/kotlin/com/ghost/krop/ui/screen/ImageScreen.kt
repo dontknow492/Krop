@@ -31,9 +31,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ghost.krop.repository.LoadFiles
+import com.ghost.krop.repository.settings.AppSettings
 import com.ghost.krop.ui.components.*
 import com.ghost.krop.viewModel.ImageEvent
 import com.ghost.krop.viewModel.ImageViewModel
+import com.ghost.krop.viewModel.SettingsEvent
 import org.koin.compose.viewmodel.koinViewModel
 import java.nio.file.Path
 
@@ -41,7 +43,7 @@ import java.nio.file.Path
 @Composable
 fun ImageScreen(
     modifier: Modifier = Modifier,
-    viewModel: ImageViewModel = koinViewModel()
+    viewModel: ImageViewModel = koinViewModel(),
 ) {
 
     rememberDirectoryPicker(title = "Open Image Folder") { file ->
@@ -49,12 +51,6 @@ fun ImageScreen(
             viewModel.onEvent(ImageEvent.LoadImages(file.toPath()))
         }
     }
-
-//    LaunchedEffect(Unit) {
-//        viewModel.onEvent(
-//            ImageEvent.LoadImages(Path.of("D:\\Media\\Image\\Manhwa"))
-//        )
-//    }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var deleteImage by remember { mutableStateOf<Path?>(null) }

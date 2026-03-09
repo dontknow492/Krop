@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ghost.krop.models.DirectorySettings
 import com.ghost.krop.repository.ImageRepository
 import com.ghost.krop.repository.LoadFiles
+import com.ghost.krop.repository.settings.SettingsRepository
 import com.ghost.krop.ui.components.ImageCardType
 import com.ghost.krop.utils.openFileInExplorer
 import com.ghost.krop.viewModel.ImageSideEffect.ShowError
@@ -62,7 +63,10 @@ sealed interface ImageSideEffect {
 
 class ImageViewModel(
     private val imageRepository: ImageRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
+
+    private val settings = settingsRepository.settings
 
     // --- Private Mutable States ---
     private val _rawImages = MutableStateFlow<List<Path>>(emptyList())
@@ -159,6 +163,18 @@ class ImageViewModel(
     )
 
     init {
+        // Restore last directory
+        settings
+            .map { it.sessionState.files }
+            .filterNotNull()
+            .take(1)
+            .onEach { files ->
+                _currentDir.value = files
+            }
+            .launchIn(viewModelScope)
+
+
+
         // Automatically trigger reload if directory or settings change
         combine(_currentDir.filterNotNull(), _directorySettings) { dir, settings ->
             dir to settings
@@ -177,14 +193,28 @@ class ImageViewModel(
     // --- Intent Dispatcher ---
     fun onEvent(event: ImageEvent) {
         when (event) {
-            is ImageEvent.LoadImages -> _currentDir.update {
-                LoadFiles(
-                    folders = listOf(event.directory),
-                    files = emptyList()
-                )
+            is ImageEvent.LoadImages -> {
+                _currentDir.update {
+                    LoadFiles(
+                        folders = listOf(event.directory),
+                        files = emptyList()
+                    )
+                }
+
+                // Persist session
+                settingsRepository.updateSettings {
+                    it.copy(
+                        sessionState = it.sessionState.copy(
+                            files = _currentDir.value
+                        )
+                    )
+                }
             }
 
-            is ImageEvent.SelectImage -> _selectedImage.update { event.path }
+            is ImageEvent.SelectImage -> {
+                _selectedImage.update { event.path }
+            }
+
             is ImageEvent.Search -> _searchQuery.update { event.query }
             is ImageEvent.ChangeViewMode -> _viewMode.value = event.viewMode
             is ImageEvent.DirectorySettingChange -> _directorySettings.update { event.setting }
@@ -212,11 +242,23 @@ class ImageViewModel(
                 }
             }
 
-            is ImageEvent.LoadFiles -> _currentDir.update {
-                LoadFiles(
+            is ImageEvent.LoadFiles -> {
+
+                val files = LoadFiles(
                     folders = event.folders,
                     files = event.files
                 )
+                _currentDir.update {
+                    files
+                }
+                // Persist session
+                settingsRepository.updateSettings {
+                    it.copy(
+                        sessionState = it.sessionState.copy(
+                            files = files
+                        )
+                    )
+                }
             }
 
             ImageEvent.NextImage -> {

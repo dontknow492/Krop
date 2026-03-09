@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -19,8 +20,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
@@ -138,6 +141,8 @@ private fun AnnotationCard(
     onDelete: () -> Unit
 ) {
 
+    val focusManager = LocalFocusManager.current // Accesses the global manager
+
     var expanded by rememberSaveable(annotation.id) { mutableStateOf(!false) }
 
     Surface(
@@ -196,7 +201,15 @@ private fun AnnotationCard(
                                     is Annotation.Oval -> onUpdate(annotation.copy(label = newLabel))
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = {
+                                    // This clears focus and lets your global
+                                    // shortcuts work again immediately!
+                                    focusManager.clearFocus()
+                                }
+                            ),
+                            modifier = Modifier . weight (1f),
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,

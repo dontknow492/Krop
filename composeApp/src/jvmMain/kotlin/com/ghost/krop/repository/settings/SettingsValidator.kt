@@ -1,12 +1,19 @@
 package com.ghost.krop.repository.settings
 
+import androidx.compose.ui.unit.dp
+import com.ghost.krop.repository.LoadFiles
+import java.nio.file.Files
+
 object SettingsValidator {
 
     fun validateAll(settings: AppSettings): AppSettings {
         return settings.copy(
             // 1. Global Window & UI State
-            windowWidth = settings.windowWidth.coerceIn(800, 7680), // Min: 800px, Max: 8K
-            windowHeight = settings.windowHeight.coerceIn(600, 4320),
+            windowWidth = settings.windowWidth.coerceIn(800.dp, 7680.dp), // Min: 800px, Max: 8K
+            windowHeight = settings.windowHeight.coerceIn(600.dp, 4320.dp),
+
+            positionX = settings.positionX.coerceIn(0.dp, 7680.dp),
+            positionY = settings.positionY.coerceIn(0.dp, 4320.dp),
 
             // 2. Session State (delegating to a separate function for clarity)
             sessionState = validateSession(settings.sessionState)
@@ -15,24 +22,69 @@ object SettingsValidator {
 
     fun validateSession(settings: SessionState): SessionState {
         return settings.copy(
-            // Recursion shouldn't go too deep to prevent stack/memory issues
+
+            // -----------------------------
+            // File system validation
+            // -----------------------------
+            files = validateLoadFiles(settings.files),
+
+            lastFocusedImage = settings.lastFocusedImage?.takeIf {
+                Files.exists(it) && Files.isRegularFile(it)
+            },
+
+            // -----------------------------
+            // Recursion safety
+            // -----------------------------
             maxRecursionDepth = settings.maxRecursionDepth.coerceIn(0, 10),
 
-            // UI sizing constraints
-            sidePanelWidthDp = settings.sidePanelWidthDp.coerceIn(200f, 800f),
+            // -----------------------------
+            // Image panel UI constraints
+            // -----------------------------
+            imagePanelWidth = settings.imagePanelWidth
+                .value
+                .coerceIn(200f, 800f)
+                .dp,
 
+            imagePanelExpanded = settings.imagePanelExpanded,
 
-            // Pass through logic for state fields
-            lastDirectory = if (settings.lastDirectory?.exists() == true) settings.lastDirectory else null, // If the directory doesn't exist, reset to null
-            lastFocusedImage = if (settings.lastFocusedImage != null && settings.lastFocusedImage.toFile()
-                    .exists()
-            ) settings.lastFocusedImage else null, // If the file doesn't exist, reset to null
+            // -----------------------------
+            // Inspector panel UI constraints
+            // -----------------------------
+            inspectorPanelWidth = settings.inspectorPanelWidth
+                .value
+                .coerceIn(200f, 800f)
+                .dp,
 
-            isSidebarVisible = settings.isSidebarVisible,
-            settingPanelWidth = settings.sidePanelWidthDp.coerceIn(200f, 800f),
+            inspectorPanelExpanded = settings.inspectorPanelExpanded,
+
+            // -----------------------------
+            // Gallery behavior
+            // -----------------------------
             recursiveLoad = settings.recursiveLoad,
             includeHiddenFiles = settings.includeHiddenFiles,
             galleryViewMode = settings.galleryViewMode
+        )
+    }
+
+
+    fun validateLoadFiles(loadFiles: LoadFiles?): LoadFiles? {
+        if (loadFiles == null) return null
+
+        val validFiles = loadFiles.files.filter { path ->
+            Files.exists(path) && Files.isRegularFile(path)
+        }
+
+        val validFolders = loadFiles.folders.filter { path ->
+            Files.exists(path) && Files.isDirectory(path)
+        }
+
+        if (validFiles.isEmpty() && validFolders.isEmpty()) {
+            return null
+        }
+
+        return LoadFiles(
+            files = validFiles,
+            folders = validFolders
         )
     }
 }

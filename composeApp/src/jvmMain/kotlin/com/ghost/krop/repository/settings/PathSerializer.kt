@@ -6,17 +6,20 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import java.io.File
+import java.nio.file.Path
+import java.nio.file.Paths
 
-object FileSerializer : KSerializer<File> {
+object PathSerializer : KSerializer<Path> {
+
     override val descriptor: SerialDescriptor =
-        PrimitiveSerialDescriptor("File", PrimitiveKind.STRING)
+        PrimitiveSerialDescriptor("java.nio.file.Path", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: File) {
-        encoder.encodeString(value.absolutePath)
+    override fun serialize(encoder: Encoder, value: Path) {
+        encoder.encodeString(value.toAbsolutePath().toString())
     }
 
-    override fun deserialize(decoder: Decoder): File {
-        return File(decoder.decodeString())
+    override fun deserialize(decoder: Decoder): Path {
+        return Paths.get(decoder.decodeString())
     }
 }
+

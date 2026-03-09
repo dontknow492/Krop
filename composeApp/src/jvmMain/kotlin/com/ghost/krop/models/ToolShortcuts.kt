@@ -57,7 +57,7 @@ object ShortcutRegistry {
 }
 
 
-fun handleKeyboardInput(
+fun handleCanvasKeyboardInput(
     event: KeyEvent,
     onEvent: (CanvasEvent) -> Unit
 ): Boolean {
@@ -86,6 +86,41 @@ fun handleKeyboardInput(
     val action = ShortcutRegistry.keybindings[event.key]
     return if (action != null) {
         executeAction(action, onEvent)
+        true
+    } else {
+        false
+    }
+}
+
+fun handleGlobalKeyboardInput(
+    event: KeyEvent,
+    onEvent: (UserAction) -> Unit
+): Boolean {
+    // 1. Only process the "Press" event (ignore release)
+    if (event.type != KeyEventType.KeyDown) return false
+
+    val isCtrl = event.isCtrlPressed || event.isMetaPressed
+    val isShift = event.isShiftPressed
+
+    // 2. Handle Modifier-based shortcuts first (Ctrl+Z, etc.)
+    when {
+        isCtrl && isShift && event.key == Key.Z -> {
+            onEvent(UserAction.Undo); return true
+        }
+
+        isCtrl && event.key == Key.Z -> {
+            onEvent(UserAction.Undo); return true
+        }
+
+        isCtrl && event.key == Key.Y -> {
+            onEvent(UserAction.Redo); return true
+        }
+    }
+
+    // 3. Handle Registered UserActions (Single Key shortcuts)
+    val action = ShortcutRegistry.keybindings[event.key]
+    return if (action != null) {
+        onEvent(action)
         true
     } else {
         false

@@ -1,5 +1,6 @@
 package com.ghost.krop.repository
 
+import com.ghost.krop.repository.settings.PathSerializer
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -8,6 +9,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.serialization.Serializable
 import java.io.UncheckedIOException
 import java.nio.file.Files
 import java.nio.file.Path
@@ -154,7 +156,8 @@ class ImageRepository(
 }
 
 
+@Serializable
 data class LoadFiles(
-    val files: List<Path>,
-    val folders: List<Path>
+    val files: List<@Serializable(with = PathSerializer::class) Path>,
+    val folders: List<@Serializable(with = PathSerializer::class) Path>
 )
