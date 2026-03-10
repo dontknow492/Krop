@@ -9,14 +9,16 @@ object SettingsValidator {
     fun validateAll(settings: AppSettings): AppSettings {
         return settings.copy(
             // 1. Global Window & UI State
-            windowWidth = settings.windowWidth.coerceIn(800.dp, 7680.dp), // Min: 800px, Max: 8K
+            windowWidth = settings.windowWidth.coerceIn(400.dp, 7680.dp), // Min: 800px, Max: 8K
             windowHeight = settings.windowHeight.coerceIn(600.dp, 4320.dp),
 
             positionX = settings.positionX.coerceIn(0.dp, 7680.dp),
             positionY = settings.positionY.coerceIn(0.dp, 4320.dp),
 
             // 2. Session State (delegating to a separate function for clarity)
-            sessionState = validateSession(settings.sessionState)
+            sessionState = validateSession(settings.sessionState),
+            // 3. Annotator Settings (delegating to a separate function for clarity)
+            annotatorSettings = validateAnnotatorSettings(settings.annotatorSettings)
         )
     }
 
@@ -63,6 +65,19 @@ object SettingsValidator {
             recursiveLoad = settings.recursiveLoad,
             includeHiddenFiles = settings.includeHiddenFiles,
             galleryViewMode = settings.galleryViewMode
+        )
+    }
+
+
+    fun validateAnnotatorSettings(settings: AnnotatorSettings): AnnotatorSettings {
+        return settings.copy(
+            boundingBoxOpacity = settings.boundingBoxOpacity.coerceIn(0f, 1f),
+            boundingBoxThickness = settings.boundingBoxThickness.coerceIn(1f, 10f),
+            labelFontSize = settings.labelFontSize.coerceIn(8.dp, 72.dp),
+            showBoundingBoxes = settings.showBoundingBoxes,
+            boundingBoxColor = settings.boundingBoxColor,
+            showLabels = settings.showLabels,
+            labelColor = settings.labelColor
         )
     }
 

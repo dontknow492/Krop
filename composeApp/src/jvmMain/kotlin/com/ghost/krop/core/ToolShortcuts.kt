@@ -1,7 +1,8 @@
-package com.ghost.krop.models
+package com.ghost.krop.core
 
 import androidx.compose.ui.input.key.*
-import com.ghost.krop.viewModel.CanvasEvent
+import com.ghost.krop.models.CanvasMode
+import com.ghost.krop.viewModel.annotator.CanvasEvent
 
 sealed class UserAction {
     data class SwitchTool(val mode: CanvasMode) : UserAction()

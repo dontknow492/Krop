@@ -1,6 +1,6 @@
 package com.ghost.krop.logging
 
-import com.ghost.krop.models.AppDirs
+import com.ghost.krop.utils.AppDirs
 import io.github.aakira.napier.Napier
 import java.io.File
 import java.text.SimpleDateFormat

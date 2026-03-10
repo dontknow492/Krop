@@ -1,4 +1,4 @@
-package com.ghost.krop.viewModel
+package com.ghost.krop.viewModel.image
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -8,58 +8,14 @@ import com.ghost.krop.repository.LoadFiles
 import com.ghost.krop.repository.settings.SettingsRepository
 import com.ghost.krop.ui.components.ImageCardType
 import com.ghost.krop.utils.openFileInExplorer
-import com.ghost.krop.viewModel.ImageSideEffect.ShowError
-import com.ghost.krop.viewModel.ImageSideEffect.ShowToast
+import com.ghost.krop.viewModel.image.ImageSideEffect.ShowError
+import com.ghost.krop.viewModel.image.ImageSideEffect.ShowToast
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import java.nio.file.Path
 
-// 1. Events & States
-sealed interface ImageEvent {
-    data class LoadImages(val directory: Path) : ImageEvent
-    data object ClearImages : ImageEvent
-    data class SelectImage(val path: Path) : ImageEvent
-    data class Search(val query: String) : ImageEvent
-    data class Sort(val sort: ImageSort, val direction: SortDirection) : ImageEvent
-    data class ChangeViewMode(val viewMode: ImageCardType) : ImageEvent
-    data class DeleteImage(val path: Path) : ImageEvent
-    data class DeleteImages(val paths: List<Path>) : ImageEvent
-    data class OpenInExplorer(val path: Path) : ImageEvent
-    data class DirectorySettingChange(val setting: DirectorySettings) : ImageEvent
-    data class LoadFiles(val files: List<Path>, val folders: List<Path>) : ImageEvent
-    data object NextImage : ImageEvent
-    data object PreviousImage : ImageEvent
-}
-
-enum class ImageSort {
-    NAME, SIZE, PATH, DATE
-}
-
-enum class SortDirection {
-    ASCENDING, DESCENDING
-}
-
-
-data class ImageUiState(
-    val isLoading: Boolean = false,
-    val currentDir: LoadFiles? = null,
-    val images: List<Path> = emptyList(),
-    val searchQuery: String = "",
-    val sortType: ImageSort = ImageSort.NAME,
-    val sortDirection: SortDirection = SortDirection.ASCENDING,
-    val error: String? = null,
-    val selectedImage: Path? = null,
-    val viewMode: ImageCardType = ImageCardType.POSTER,
-    val directorySettings: DirectorySettings = DirectorySettings()
-)
-
-sealed interface ImageSideEffect {
-    data class ShowError(val message: String) : ImageSideEffect
-    data class ShowToast(val message: String) : ImageSideEffect
-    data class ImageSelected(val path: Path?) : ImageSideEffect
-}
 
 class ImageViewModel(
     private val imageRepository: ImageRepository,
@@ -172,7 +128,6 @@ class ImageViewModel(
                 _currentDir.value = files
             }
             .launchIn(viewModelScope)
-
 
 
         // Automatically trigger reload if directory or settings change

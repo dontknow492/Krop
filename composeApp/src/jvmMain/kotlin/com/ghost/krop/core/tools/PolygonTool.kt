@@ -1,4 +1,4 @@
-package com.ghost.krop.core
+package com.ghost.krop.core.tools
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -14,15 +14,26 @@ import com.ghost.krop.models.Annotation
 import kotlin.math.sqrt
 
 class PolygonTool(
-    private val color: Color,
+    private var color: Color,
+    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
+
+    private val path = Path() // Pre-allocate path object
+
 
     private val points = mutableStateListOf<Offset>()
     private var preview by mutableStateOf<Offset?>(null)
 
     // How close the finger needs to be to the first point to auto-close the polygon
     private val CLOSE_THRESHOLD = 50f
+
+
+    override fun setColor(color: Color) {
+        this.color = color
+        // Update point color based on new color's luminance
+    }
 
     override fun onPointerDown(position: Offset) {
         // Start showing the preview where the finger touches
@@ -75,44 +86,52 @@ class PolygonTool(
     override fun drawPreview(drawScope: DrawScope) {
         if (points.isEmpty() && preview == null) return
 
-        val path = Path().apply {
-            if (points.isNotEmpty()) {
-                moveTo(points.first().x, points.first().y)
-                points.drop(1).forEach { lineTo(it.x, it.y) }
+        path.reset() // Clear previous frame's path
 
-                // Draw a line to the finger while dragging
-                preview?.let { lineTo(it.x, it.y) }
+        if (points.isNotEmpty()) {
+            path.moveTo(points.first().x, points.first().y)
+            points.drop(1).forEach { path.lineTo(it.x, it.y) }
+
+            // Draw a line to the finger while dragging
+            preview?.let {
+                // UX: If we are close enough to close it, snap the preview to the start!
+                val distance = calculateDistance(it, points.first())
+                if (distance < CLOSE_THRESHOLD && points.size >= 2) {
+                    path.lineTo(points.first().x, points.first().y)
+                } else {
+                    path.lineTo(it.x, it.y)
+                }
             }
         }
 
         // Draw the connecting lines
         drawScope.drawPath(
             path = path,
-            color = color,
+            color = color.copy(alpha = getOpacity()),
             style = Stroke(
-                width = 4f,
+                width = getStrokeWidth(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
             )
         )
 
-        // UX ENHANCEMENT: Highlight the starting point so the user knows where to click to close it
+
+        // Highlight the starting point "Hit Area"
         if (points.isNotEmpty()) {
             drawScope.drawCircle(
-                color = Color.Red, // Stand out color
-                radius = CLOSE_THRESHOLD / 2f, // Visual indicator of the hit area
+                color = Color.Red, // Contrast color for visibility
+                radius = 12f + getStrokeWidth() * 1.5f, // Fixed small radius for the indicator
                 center = points.first(),
-                alpha = 0.5f // Make it semi-transparent
+                alpha = 0.5f,
             )
         }
-
-        // Draw normal committed vertices
         points.forEach {
-            drawScope.drawCircle(color, 8f, it)
-        }
-
-        // Draw the active dragging vertex
-        preview?.let {
-            drawScope.drawCircle(color, 8f, it)
+            drawScope.drawCircle(
+                color,
+                radius = getStrokeWidth() * 1.5f, // Make vertices larger than the line stroke
+                center = it,
+                alpha = getOpacity() + 0.2f // Make vertices slightly more visible than lines
+            )
         }
     }
+
 }

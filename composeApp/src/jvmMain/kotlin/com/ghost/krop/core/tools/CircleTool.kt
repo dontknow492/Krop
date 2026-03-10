@@ -1,4 +1,4 @@
-package com.ghost.krop.core
+package com.ghost.krop.core.tools
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,13 +11,25 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.ghost.krop.models.Annotation
 import kotlin.math.hypot
 
+//private val showLabel: Boolean,
+//    private val label: String,
+//    private val labelColor: Color,
+//    private val boundingBoxOpacity: Float,
+//    private val boundingBoxStrokeWidth: Float,
+
 class CircleTool(
-    private val color: Color,
+    private var color: Color,
+    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
 
     private var start by mutableStateOf<Offset?>(null)
     private var current by mutableStateOf<Offset?>(null)
+
+    override fun setColor(color: Color) {
+        this.color = color
+    }
 
     override fun onPointerDown(position: Offset) {
         start = position
@@ -54,11 +66,11 @@ class CircleTool(
         val radius = hypot(e.x - s.x, e.y - s.y)
 
         drawScope.drawCircle(
-            color = color,
+            color = color.copy(alpha = getOpacity()), // Live opacity
             radius = radius,
             center = s,
             style = Stroke(
-                width = 4f,
+                width = getStrokeWidth(), // Live stroke
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
             )
         )

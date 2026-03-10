@@ -33,14 +33,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ghost.krop.core.CanvasTool
+import com.ghost.krop.core.ShortcutRegistry
+import com.ghost.krop.core.tools.CanvasTool
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
-import com.ghost.krop.models.ShortcutRegistry
 import com.ghost.krop.ui.components.ColorPickerButton
 import com.ghost.krop.ui.components.ImageThumbnail
-import com.ghost.krop.viewModel.CanvasEvent
-import com.ghost.krop.viewModel.CanvasUiState
+import com.ghost.krop.viewModel.annotator.CanvasEvent
+import com.ghost.krop.viewModel.annotator.CanvasUiState
 
 @Composable
 fun AnnotatorScreen(
@@ -197,7 +197,7 @@ private fun AnnotationCanvas(
 
     Canvas(modifier = modifier.fillMaxSize()) {
 
-        val stroke = 3f / uiState.scale
+        val stroke = uiState.strokeWidth
 
         /* ----------------------------- */
         /* Draw Finalized Annotations */
@@ -209,7 +209,7 @@ private fun AnnotationCanvas(
 
                 is Annotation.BoundingBox -> {
                     drawRect(
-                        color = annotation.color,
+                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
                         topLeft = Offset(annotation.xMin, annotation.yMin),
                         size = Size(
                             annotation.xMax - annotation.xMin,
@@ -237,7 +237,7 @@ private fun AnnotationCanvas(
 
                         drawPath(
                             path = path,
-                            color = annotation.color,
+                            color = annotation.color.copy(alpha = uiState.annotationOpacity),
                             style = Stroke(width = stroke)
                         )
                     }
@@ -245,7 +245,7 @@ private fun AnnotationCanvas(
 
                 is Annotation.Circle -> {
                     drawCircle(
-                        color = annotation.color,
+                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
                         radius = annotation.radius,
                         center = annotation.center,
                         style = Stroke(width = stroke)
@@ -254,7 +254,7 @@ private fun AnnotationCanvas(
 
                 is Annotation.Oval -> {
                     drawOval(
-                        color = annotation.color,
+                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
                         topLeft = Offset(annotation.xMin, annotation.yMin),
                         size = Size(annotation.xMax - annotation.xMin, annotation.yMax - annotation.yMin),
                         style = Stroke(width = stroke)
@@ -263,7 +263,7 @@ private fun AnnotationCanvas(
 
                 is Annotation.Line -> {
                     drawLine(
-                        color = annotation.color,
+                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
                         start = annotation.start,
                         end = annotation.end,
                         strokeWidth = stroke

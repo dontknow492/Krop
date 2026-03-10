@@ -1,4 +1,4 @@
-package com.ghost.krop.models
+package com.ghost.krop.utils
 
 import java.io.File
 
@@ -58,5 +58,3 @@ object AppDirs {
 
 
 }
-
-

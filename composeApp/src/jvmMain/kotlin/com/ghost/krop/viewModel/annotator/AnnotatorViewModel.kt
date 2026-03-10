@@ -1,103 +1,30 @@
-package com.ghost.krop.viewModel
+package com.ghost.krop.viewModel.annotator
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ghost.krop.core.*
+import com.ghost.krop.core.tools.*
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
+import com.ghost.krop.repository.settings.SettingsRepository
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.nio.file.Path
 
-/* ----------------------------- */
-/* Annotation Models */
-/* ----------------------------- */
 
-data class HistoryState<T>(
-    val past: List<T> = emptyList(),
-    val present: T,
-    val future: List<T> = emptyList()
-)
-
-/* ----------------------------- */
-/* Canvas Events */
-/* ----------------------------- */
-
-sealed interface CanvasEvent {
-    //
-    data class SelectImage(val path: Path?) : CanvasEvent
-
-    // Viewport
-    data class Pan(val delta: Offset) : CanvasEvent
-    data class Zoom(val scale: Float) : CanvasEvent
-    object ZoomIn : CanvasEvent
-    object ZoomOut : CanvasEvent
-    object ResetZoom : CanvasEvent
-    data class ChangeMode(val mode: CanvasMode) : CanvasEvent // Added this crucial event
-
-    // Management
-    data class AddAnnotation(val annotation: Annotation) : CanvasEvent
-    data class RemoveAnnotation(val id: String) : CanvasEvent
-    data class UpdateAnnotation(val annotation: Annotation) : CanvasEvent
-    data object ClearCanvas : CanvasEvent
-
-    // Navigation
-    data object NextImage : CanvasEvent
-    data object PreviousImage : CanvasEvent
-
-    // History
-    data object Undo : CanvasEvent
-    data object Redo : CanvasEvent
-
-    // color
-    data class ChangeColor(val color: Color) : CanvasEvent
-}
-
-/* ----------------------------- */
-/* Side Effects */
-/* ----------------------------- */
-
-sealed interface SideEffect {
-    data object ShowNextImage : SideEffect
-    data object ShowPreviousImage : SideEffect
-    data class ShowToast(val message: String) : SideEffect
-    data class ShowError(val message: String) : SideEffect
-}
-
-/* ----------------------------- */
-/* Canvas Mode */
-/* ----------------------------- */
-
-enum class ResizeHandle {
-    TOP_LEFT, TOP_RIGHT, BOTTOM_LEFT, BOTTOM_RIGHT
-}
-
-/* ----------------------------- */
-/* UI State */
-/* ----------------------------- */
-
-data class CanvasUiState(
-    val selectedImage: Path? = null,
-    val scale: Float = 1f,
-    val offset: Offset = Offset.Zero,
-    val mode: CanvasMode = CanvasMode.Draw.Shape.Rectangle,
-    val startDrag: Offset? = null,
-    val currentDrag: Offset? = null,
-    val color: Color = Color.Green,
-)
-
-/* ----------------------------- */
-/* ViewModel */
-/* ----------------------------- */
-
-class AnnotatorViewModel : ViewModel() {
+class AnnotatorViewModel(
+    private val settingsRepository: SettingsRepository
+) : ViewModel() {
 
     // Prevent OutOfMemory exceptions by limiting undo steps
     private val MAX_HISTORY = 50
     private val ZOOM_STEP = 0.25f
+
+
+    /* ------------- Settings ---------------- */
+    private val settings = settingsRepository.settings
 
     /* ---------- Annotation History State ---------- */
 
@@ -135,6 +62,39 @@ class AnnotatorViewModel : ViewModel() {
     private val _sideEffects = Channel<SideEffect>()
     val sideEffects = _sideEffects.receiveAsFlow()
 
+
+    /* ----------------------------- */
+    init {
+        settings.map { it.annotatorSettings.tool }
+            .onEach { setMode(it) }
+            .launchIn(viewModelScope)
+
+        settings.map { it.annotatorSettings.showBoundingBoxes }
+            .onEach { _uiState.update { state -> state.copy(showAnnotationLabel = it) } }
+            .launchIn(viewModelScope)
+
+        settings.map { it.annotatorSettings.boundingBoxColor }
+            .onEach {
+                _uiState.update { state -> state.copy(color = it) }
+                activeTool?.setColor(it)
+            }
+            .launchIn(viewModelScope)
+
+        settings.map { it.annotatorSettings.boundingBoxThickness }
+            .onEach { _uiState.update { state -> state.copy(strokeWidth = it) } }
+            .launchIn(viewModelScope)
+
+        settings.map {
+            if (it.annotatorSettings.showBoundingBoxes) it.annotatorSettings.boundingBoxOpacity else 0f
+        }.onEach { _uiState.update { state -> state.copy(annotationOpacity = it) } }
+            .launchIn(viewModelScope)
+
+        settings.map {
+            if (it.annotatorSettings.showLabels) it.annotatorSettings.labelFontSize else 0.dp
+        }.onEach { _uiState.update { state -> state.copy(labelFontSize = it) } }.launchIn(viewModelScope)
+
+    }
+
     /* ---------- Event Dispatcher ---------- */
 
     fun onEvent(event: CanvasEvent) {
@@ -147,7 +107,16 @@ class AnnotatorViewModel : ViewModel() {
 
             CanvasEvent.ResetZoom -> _uiState.update { it.copy(scale = 1f, offset = Offset.Zero) }
 
-            is CanvasEvent.ChangeMode -> setMode(event.mode)
+            is CanvasEvent.ChangeMode -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            tool = event.mode
+                        )
+                    )
+                }
+            }
+
 
             is CanvasEvent.AddAnnotation -> addAnnotation(event.annotation)
             is CanvasEvent.RemoveAnnotation -> deleteAnnotation(event.id)
@@ -159,7 +128,16 @@ class AnnotatorViewModel : ViewModel() {
             CanvasEvent.Undo -> undo()
             CanvasEvent.Redo -> redo()
 
-            is CanvasEvent.ChangeColor -> _uiState.update { it.copy(color = event.color) }
+            is CanvasEvent.ChangeColor -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            boundingBoxColor = event.color
+                        )
+                    )
+                }
+            }
+
             is CanvasEvent.SelectImage -> selectImage(event.path)
 
             is CanvasEvent.UpdateAnnotation -> {
@@ -169,6 +147,46 @@ class AnnotatorViewModel : ViewModel() {
                 // Only commit if something actually changed
                 if (currentList.any { it.id == event.annotation.id }) {
                     commitNewState(newList)
+                }
+            }
+
+            is CanvasEvent.ChangeLabelFontSize -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            labelFontSize = event.fontSize
+                        )
+                    )
+                }
+            }
+
+            is CanvasEvent.ChangeOpacity -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            boundingBoxOpacity = event.opacity
+                        )
+                    )
+                }
+            }
+
+            is CanvasEvent.ChangeStrokeWidth -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            boundingBoxThickness = event.width
+                        )
+                    )
+                }
+            }
+
+            CanvasEvent.ToggleLabelVisibility -> {
+                settingsRepository.updateSettings {
+                    it.copy(
+                        annotatorSettings = it.annotatorSettings.copy(
+                            showLabels = !it.annotatorSettings.showLabels
+                        )
+                    )
                 }
             }
         }
@@ -254,21 +272,46 @@ class AnnotatorViewModel : ViewModel() {
 
             /* --- Geometric Shapes --- */
             CanvasMode.Draw.Shape.Rectangle ->
-                RectangleTool(currentColor, ::commit)
+                RectangleTool(
+                    currentColor,
+                    getOpacity = { _uiState.value.annotationOpacity },
+                    getStrokeWidth = { _uiState.value.strokeWidth },
+                    commit = ::commit
+                )
 
             CanvasMode.Draw.Shape.Circle ->
-                CircleTool(currentColor, ::commit)
+                CircleTool(
+                    currentColor,
+                    getOpacity = { _uiState.value.annotationOpacity },
+                    getStrokeWidth = { _uiState.value.strokeWidth },
+                    commit = ::commit
+                )
 
             CanvasMode.Draw.Shape.Oval ->
-                OvalTool(currentColor, ::commit)
+                OvalTool(
+                    currentColor,
+                    getOpacity = { _uiState.value.annotationOpacity },
+                    getStrokeWidth = { _uiState.value.strokeWidth },
+                    commit = ::commit
+                )
 
 
             /* --- Path & Line Tools --- */
             CanvasMode.Draw.Path.Polygon ->
-                PolygonTool(currentColor, ::commit)
+                PolygonTool(
+                    currentColor,
+                    getOpacity = { _uiState.value.annotationOpacity },
+                    getStrokeWidth = { _uiState.value.strokeWidth },
+                    commit = ::commit
+                )
 
             CanvasMode.Draw.Path.Line ->
-                LineTool(currentColor, ::commit)
+                LineTool(
+                    currentColor,
+                    getOpacity = { _uiState.value.annotationOpacity },
+                    getStrokeWidth = { _uiState.value.strokeWidth },
+                    commit = ::commit
+                )
 
 
             /* --- Non-Drawing Modes (Pan, Edit, Resize) --- */

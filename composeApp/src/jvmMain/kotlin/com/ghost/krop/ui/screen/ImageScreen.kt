@@ -31,11 +31,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ghost.krop.repository.LoadFiles
-import com.ghost.krop.repository.settings.AppSettings
 import com.ghost.krop.ui.components.*
-import com.ghost.krop.viewModel.ImageEvent
-import com.ghost.krop.viewModel.ImageViewModel
-import com.ghost.krop.viewModel.SettingsEvent
+import com.ghost.krop.viewModel.image.ImageEvent
+import com.ghost.krop.viewModel.image.ImageViewModel
 import org.koin.compose.viewmodel.koinViewModel
 import java.nio.file.Path
 

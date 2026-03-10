@@ -1,17 +1,21 @@
-package com.ghost.krop.core
+package com.ghost.krop.core.tools
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import com.ghost.krop.models.Annotation
-import kotlin.math.hypot
+import kotlin.math.abs
 
-class LineTool(
-    private val color: Color,
+class OvalTool(
+    private var color: Color,
+    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
 
@@ -23,6 +27,10 @@ class LineTool(
         current = position
     }
 
+    override fun setColor(color: Color) {
+        this.color = color
+    }
+
     override fun onPointerMove(position: Offset) {
         if (start != null) current = position
     }
@@ -31,10 +39,16 @@ class LineTool(
         val s = start ?: return
         val e = current ?: return
 
-        val distance = hypot(e.x - s.x, e.y - s.y)
-
-        if (distance > 5f) {
-            commit(Annotation.Line(start = s, end = e, color = color))
+        if (abs(e.x - s.x) > 5f && abs(e.y - s.y) > 5f) {
+            commit(
+                Annotation.Oval(
+                    xMin = minOf(s.x, e.x),
+                    yMin = minOf(s.y, e.y),
+                    xMax = maxOf(s.x, e.x),
+                    yMax = maxOf(s.y, e.y),
+                    color = color
+                )
+            )
         }
 
         start = null
@@ -50,12 +64,14 @@ class LineTool(
         val s = start ?: return
         val e = current ?: return
 
-        drawScope.drawLine(
-            color = color,
-            start = s,
-            end = e,
-            strokeWidth = 4f,
-            pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
+        drawScope.drawOval(
+            color = color.copy(alpha = getOpacity()),
+            topLeft = Offset(minOf(s.x, e.x), minOf(s.y, e.y)),
+            size = Size(abs(e.x - s.x), abs(e.y - s.y)),
+            style = Stroke(
+                width = getStrokeWidth(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
+            )
         )
     }
 }

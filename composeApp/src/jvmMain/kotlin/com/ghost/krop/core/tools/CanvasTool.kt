@@ -1,6 +1,7 @@
-package com.ghost.krop.core
+package com.ghost.krop.core.tools
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 
 interface CanvasTool {
@@ -9,5 +10,6 @@ interface CanvasTool {
     fun onPointerUp(position: Offset)
     fun onCancel()
     fun drawPreview(drawScope: DrawScope)
+    fun setColor(color: Color)
 }
 

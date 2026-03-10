@@ -7,14 +7,20 @@ import androidx.compose.ui.window.*
 import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.ViewModelStoreOwner
 import coil3.compose.setSingletonImageLoaderFactory
+import com.ghost.krop.core.CoilImageLoader
+import com.ghost.krop.core.UserAction
+import com.ghost.krop.core.handleGlobalKeyboardInput
 import com.ghost.krop.di.appModule
-import com.ghost.krop.models.CoilImageLoader
-import com.ghost.krop.models.UserAction
-import com.ghost.krop.models.handleGlobalKeyboardInput
+import com.ghost.krop.logging.CrashHandler
 import com.ghost.krop.ui.App
 import com.ghost.krop.ui.theme.KropTheme
 import com.ghost.krop.utils.initLogger
-import com.ghost.krop.viewModel.*
+import com.ghost.krop.viewModel.annotator.AnnotatorViewModel
+import com.ghost.krop.viewModel.annotator.CanvasEvent
+import com.ghost.krop.viewModel.image.ImageEvent
+import com.ghost.krop.viewModel.image.ImageViewModel
+import com.ghost.krop.viewModel.settings.SettingsEvent
+import com.ghost.krop.viewModel.settings.SettingsViewModel
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +34,7 @@ fun main() = application {
     initLogger()
     Napier.i("Application started")
 
-//    CrashHandler.install()
+    CrashHandler.install()
 
     startKoin {
         modules(appModule)
@@ -111,7 +117,7 @@ fun ApplicationScope.AppWindow() {
         LaunchedEffect(Unit) {
             Napier.i("Main window initialized")
         }
-        KropTheme() {
+        KropTheme {
             App(
                 settingsViewModel = settingsViewModel,
                 imageViewModel = imageViewModel,

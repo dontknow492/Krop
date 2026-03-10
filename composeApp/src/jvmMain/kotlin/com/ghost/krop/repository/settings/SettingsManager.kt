@@ -1,6 +1,7 @@
 package com.ghost.krop.repository.settings
 
-import com.ghost.krop.models.AppDirs
+import com.ghost.krop.utils.AppDirs
+import io.github.aakira.napier.Napier
 import kotlinx.serialization.json.Json
 import java.io.File
 
@@ -22,7 +23,9 @@ class SettingsManager {
         val folder = AppDirs.configDir
 
         if (!folder.exists()) folder.mkdirs()
-        File(folder, "settings.json")
+        val filePath = File(folder, "settings.json")
+        Napier.i("Settings file: $filePath")
+        filePath
     }
 
     // 3. The "Save" function
@@ -47,6 +50,7 @@ class SettingsManager {
 
                 // Validate the loaded data before returning it to the UI
                 SettingsValidator.validateAll(loadedSettings)
+//                loadedSettings
 
             } else {
                 AppSettings() // Return defaults if file doesn't exist

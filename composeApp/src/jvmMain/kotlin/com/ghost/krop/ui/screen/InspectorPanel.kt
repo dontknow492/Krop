@@ -35,12 +35,14 @@ import com.ghost.krop.ui.components.CollapseDirection
 import com.ghost.krop.ui.components.Collapsible
 import com.ghost.krop.ui.components.ColorPickerButton
 import com.ghost.krop.ui.components.TogglePosition
-import com.ghost.krop.viewModel.CanvasEvent
+import com.ghost.krop.viewModel.annotator.CanvasEvent
+import com.ghost.krop.viewModel.annotator.CanvasUiState
 import kotlin.math.roundToInt
 
 @Composable
 fun InspectorPanel(
     modifier: Modifier = Modifier,
+    uiState: CanvasUiState,
     annotations: List<Annotation>,
     onEvent: (CanvasEvent) -> Unit,
 ) {
@@ -55,6 +57,8 @@ fun InspectorPanel(
                 DividerDefaults.Thickness,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
+
+            // Settings Header
 
             // Annotation List
             LazyColumn(
@@ -209,7 +213,7 @@ private fun AnnotationCard(
                                     focusManager.clearFocus()
                                 }
                             ),
-                            modifier = Modifier . weight (1f),
+                            modifier = Modifier.weight(1f),
                             textStyle = TextStyle(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,
@@ -957,6 +961,7 @@ private fun InspectorPanelPreview() {
 
     InspectorPanel(
         annotations = sampleAnnotations,
+        uiState = CanvasUiState(),
         onEvent = {}
     )
 

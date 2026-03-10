@@ -1,7 +1,6 @@
 package com.ghost.krop.utils
 
 import com.ghost.krop.logging.FileAntilog
-import com.ghost.krop.models.AppDirs
 import io.github.aakira.napier.DebugAntilog
 import io.github.aakira.napier.Napier
 

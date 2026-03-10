@@ -1,34 +1,34 @@
 package com.ghost.krop.ui
 
 import androidx.compose.animation.*
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.ghost.krop.models.UserAction
-import com.ghost.krop.models.handleGlobalKeyboardInput
 import com.ghost.krop.ui.components.CollapseDirection
 import com.ghost.krop.ui.components.Collapsible
 import com.ghost.krop.ui.components.VerticalDraggableSplitter
+import com.ghost.krop.ui.screen.AnnotationSettingsDialogButton
 import com.ghost.krop.ui.screen.AnnotatorScreen
 import com.ghost.krop.ui.screen.ImageScreen
 import com.ghost.krop.ui.screen.InspectorPanel
-import com.ghost.krop.viewModel.*
+import com.ghost.krop.viewModel.annotator.AnnotatorViewModel
+import com.ghost.krop.viewModel.annotator.CanvasEvent
+import com.ghost.krop.viewModel.annotator.SideEffect
+import com.ghost.krop.viewModel.image.ImageEvent
+import com.ghost.krop.viewModel.image.ImageSideEffect
+import com.ghost.krop.viewModel.image.ImageViewModel
+import com.ghost.krop.viewModel.settings.SettingsEvent
+import com.ghost.krop.viewModel.settings.SettingsViewModel
 import org.koin.compose.viewmodel.koinViewModel
 import java.nio.file.Path
 
@@ -41,8 +41,8 @@ fun App(
 
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
 
-    val focusRequester = remember { FocusRequester() }
-    val focusManager = LocalFocusManager.current
+    remember { FocusRequester() }
+    LocalFocusManager.current
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -83,8 +83,24 @@ fun App(
         }
 
 
-        // pre loading image of development
+    }
+    // pre loading image of development
+    LaunchedEffect(Unit) {
+        imageViewModel.onEvent(
+            ImageEvent.LoadFiles(
+                folders = listOf(Path.of("D:\\Media\\Image")),
+                files = emptyList()
+            )
+        )
 
+        val testImageDir = Path.of("D:\\Media\\Image")
+        val testImagePath = Path.of("D:\\Media\\Image\\mouse.png")
+        if (testImagePath.toFile().exists()) {
+            imageViewModel.onEvent(ImageEvent.SelectImage(testImagePath))
+        }
+        if (testImageDir.toFile().exists()) {
+            imageViewModel.onEvent(ImageEvent.LoadFiles(folders = listOf(testImageDir), files = emptyList()))
+        }
     }
 
 
@@ -199,6 +215,11 @@ fun App(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            AnnotationSettingsDialogButton(
+                                modifier = Modifier.padding(end = 8.dp),
+                                uiState = uiState,
+                                onEvent = annotatorViewModel::onEvent
+                            )
                             Text(
                                 text = "Annotations (${annotations.size})",
                                 style = MaterialTheme.typography.titleMedium,
@@ -232,7 +253,8 @@ fun App(
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
                         annotations = annotations,
-                        onEvent = annotatorViewModel::onEvent
+                        onEvent = annotatorViewModel::onEvent,
+                        uiState = uiState,
                     )
                 }
             }

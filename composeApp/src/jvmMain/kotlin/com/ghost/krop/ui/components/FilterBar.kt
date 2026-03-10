@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.ghost.krop.models.DirectorySettings
 import com.ghost.krop.repository.LoadFiles
-import com.ghost.krop.viewModel.ImageSort
-import com.ghost.krop.viewModel.SortDirection
+import com.ghost.krop.viewModel.image.ImageSort
+import com.ghost.krop.viewModel.image.SortDirection
 import kotlinx.coroutines.launch
 import java.nio.file.Path
 

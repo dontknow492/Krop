@@ -15,11 +15,15 @@ object PathSerializer : KSerializer<Path> {
         PrimitiveSerialDescriptor("java.nio.file.Path", PrimitiveKind.STRING)
 
     override fun serialize(encoder: Encoder, value: Path) {
-        encoder.encodeString(value.toAbsolutePath().toString())
+        // Store the normalized absolute path
+        val pathString = value.toAbsolutePath().normalize().toString()
+        encoder.encodeString(pathString)
     }
 
     override fun deserialize(decoder: Decoder): Path {
-        return Paths.get(decoder.decodeString())
+        val pathString = decoder.decodeString()
+        return Paths.get(pathString)
     }
 }
+
 

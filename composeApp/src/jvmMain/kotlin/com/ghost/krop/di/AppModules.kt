@@ -3,9 +3,9 @@ package com.ghost.krop.di
 import com.ghost.krop.repository.ImageRepository
 import com.ghost.krop.repository.settings.SettingsManager
 import com.ghost.krop.repository.settings.SettingsRepository
-import com.ghost.krop.viewModel.AnnotatorViewModel
-import com.ghost.krop.viewModel.ImageViewModel
-import com.ghost.krop.viewModel.SettingsViewModel
+import com.ghost.krop.viewModel.annotator.AnnotatorViewModel
+import com.ghost.krop.viewModel.image.ImageViewModel
+import com.ghost.krop.viewModel.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,7 +33,9 @@ val viewModelModule = module {
         )
     }
     factory<AnnotatorViewModel> { params ->
-        AnnotatorViewModel()
+        AnnotatorViewModel(
+            settingsRepository = get(),
+        )
     }
     factory<SettingsViewModel> { SettingsViewModel(settingsRepository = get()) }
 }

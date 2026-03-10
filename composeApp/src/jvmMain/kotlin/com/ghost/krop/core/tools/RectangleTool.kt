@@ -1,4 +1,4 @@
-package com.ghost.krop.core
+package com.ghost.krop.core.tools
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,17 +10,22 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.ghost.krop.models.Annotation
-import com.ghost.krop.ui.theme.Seed
 import kotlin.math.abs
 
 class RectangleTool(
-    private val color: Color,
+    private var color: Color,
+    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
 
     // Wrapped in Compose State to trigger Canvas redraws
     private var start by mutableStateOf<Offset?>(null)
     private var current by mutableStateOf<Offset?>(null)
+
+    override fun setColor(color: Color) {
+        this.color = color
+    }
 
     override fun onPointerDown(position: Offset) {
         start = position
@@ -63,11 +68,11 @@ class RectangleTool(
         val e = current ?: return
 
         drawScope.drawRect(
-            color = Seed,
+            color = color.copy(alpha = getOpacity()),
             topLeft = Offset(minOf(s.x, e.x), minOf(s.y, e.y)),
             size = Size(abs(e.x - s.x), abs(e.y - s.y)),
             style = Stroke(
-                width = 4f,
+                width = getStrokeWidth(),
                 // 20f represents the dash length, 10f represents the gap length
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
             )
