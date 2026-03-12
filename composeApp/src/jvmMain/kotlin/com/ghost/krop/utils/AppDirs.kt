@@ -39,6 +39,13 @@ object AppDirs {
     }
 
     /**
+     * Annotations
+     */
+    val imageAnnotationDir: File by lazy {
+        File(cacheDir, "image_annotation_cache").apply { mkdirs() }
+    }
+
+    /**
      * Database directory
      */
     val databaseDir: File by lazy {

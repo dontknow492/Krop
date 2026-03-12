@@ -1,4 +1,4 @@
-package com.ghost.krop.repository.settings
+package com.ghost.krop.core.serializer
 
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp

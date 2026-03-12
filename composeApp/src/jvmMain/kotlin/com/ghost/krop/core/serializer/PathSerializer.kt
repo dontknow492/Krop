@@ -1,4 +1,4 @@
-package com.ghost.krop.repository.settings
+package com.ghost.krop.core.serializer
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind

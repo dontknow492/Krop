@@ -1,6 +1,6 @@
 package com.ghost.krop.repository
 
-import com.ghost.krop.repository.settings.PathSerializer
+import com.ghost.krop.core.serializer.PathSerializer
 import io.github.aakira.napier.Napier
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers

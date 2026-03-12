@@ -19,4 +19,11 @@ data class CanvasUiState(
     val annotationOpacity: Float = 1f,
     val showAnnotationLabel: Boolean = true,
     val labelFontSize: Dp = 14.dp,
+
+    // New fields from repository
+    val isLoading: Boolean = false,
+    val isSaving: Boolean = false,
+    val hasUnsavedChanges: Boolean = false,
+    val lastSaved: Long = 0L,
+    val error: String? = null
 )

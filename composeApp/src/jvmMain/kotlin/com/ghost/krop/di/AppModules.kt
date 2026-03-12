@@ -1,11 +1,12 @@
 package com.ghost.krop.di
 
 import com.ghost.krop.repository.ImageRepository
+import com.ghost.krop.repository.annotations.AnnotationManager
+import com.ghost.krop.repository.annotations.AnnotationRepository
 import com.ghost.krop.repository.settings.SettingsManager
 import com.ghost.krop.repository.settings.SettingsRepository
 import com.ghost.krop.viewModel.annotator.AnnotatorViewModel
 import com.ghost.krop.viewModel.image.ImageViewModel
-import com.ghost.krop.viewModel.settings.SettingsViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +20,21 @@ val applicationScope = CoroutineScope(
 val repositoryModule = module {
     single<CoroutineDispatcher> { Dispatchers.IO }
     single<SettingsManager> { SettingsManager() }
-    single { SettingsRepository(manager = get(), scope = applicationScope) }
+    single {
+        SettingsRepository(
+            settingsManager = get(),
+            scope = applicationScope,
+        )
+    }
+
+    single<AnnotationManager> { AnnotationManager() }
+    single<AnnotationRepository> {
+        AnnotationRepository(
+            annotationManager = get(),
+            scope = applicationScope,
+        )
+    }
+
     single<ImageRepository> { ImageRepository(ioDispatcher = get()) }
 }
 
@@ -35,9 +50,10 @@ val viewModelModule = module {
     factory<AnnotatorViewModel> { params ->
         AnnotatorViewModel(
             settingsRepository = get(),
+            annotationRepository = get(),
         )
     }
-    factory<SettingsViewModel> { SettingsViewModel(settingsRepository = get()) }
+
 }
 
 val appModule = module {

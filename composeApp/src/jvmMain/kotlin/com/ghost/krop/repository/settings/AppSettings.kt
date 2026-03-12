@@ -4,6 +4,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
+import com.ghost.krop.core.serializer.ColorSerializerLenient
+import com.ghost.krop.core.serializer.DpSerializer
+import com.ghost.krop.core.serializer.PathSerializer
 import com.ghost.krop.models.CanvasMode
 import com.ghost.krop.models.ThemeMode
 import com.ghost.krop.repository.LoadFiles

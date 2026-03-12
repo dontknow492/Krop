@@ -42,4 +42,7 @@ sealed interface CanvasEvent {
 
     // color
     data class ChangeColor(val color: Color) : CanvasEvent
+
+    //ssave
+    object ForceSave : CanvasEvent
 }

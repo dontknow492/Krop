@@ -1,29 +1,22 @@
 package com.ghost.krop.ui.screen
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.ImageNotSupported
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.PointerIcon.Companion.Crosshair
 import androidx.compose.ui.input.pointer.PointerIcon.Companion.Default
@@ -31,14 +24,11 @@ import androidx.compose.ui.input.pointer.PointerIcon.Companion.Hand
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.ghost.krop.core.ShortcutRegistry
 import com.ghost.krop.core.tools.CanvasTool
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
-import com.ghost.krop.ui.components.ColorPickerButton
-import com.ghost.krop.ui.components.ImageThumbnail
+import com.ghost.krop.ui.components.*
 import com.ghost.krop.viewModel.annotator.CanvasEvent
 import com.ghost.krop.viewModel.annotator.CanvasUiState
 
@@ -184,425 +174,17 @@ fun AnnotatorScreen(
                 mode = uiState.mode
             )
         }
-    }
-}
-
-@Composable
-private fun AnnotationCanvas(
-    annotations: List<Annotation>,
-    uiState: CanvasUiState,
-    activeTool: CanvasTool?,
-    modifier: Modifier = Modifier,
-) {
-
-    Canvas(modifier = modifier.fillMaxSize()) {
-
-        val stroke = uiState.strokeWidth
-
-        /* ----------------------------- */
-        /* Draw Finalized Annotations */
-        /* ----------------------------- */
-
-        annotations.forEach { annotation ->
-
-            when (annotation) {
-
-                is Annotation.BoundingBox -> {
-                    drawRect(
-                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        topLeft = Offset(annotation.xMin, annotation.yMin),
-                        size = Size(
-                            annotation.xMax - annotation.xMin,
-                            annotation.yMax - annotation.yMin
-                        ),
-                        style = Stroke(width = stroke)
-                    )
-                }
-
-                is Annotation.Polygon -> {
-
-                    if (annotation.points.size >= 2) {
-
-                        val path = Path().apply {
-
-                            val first = annotation.points.first()
-                            moveTo(first.x, first.y)
-
-                            annotation.points.drop(1).forEach { point ->
-                                lineTo(point.x, point.y)
-                            }
-
-                            close()
-                        }
-
-                        drawPath(
-                            path = path,
-                            color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                            style = Stroke(width = stroke)
-                        )
-                    }
-                }
-
-                is Annotation.Circle -> {
-                    drawCircle(
-                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        radius = annotation.radius,
-                        center = annotation.center,
-                        style = Stroke(width = stroke)
-                    )
-                }
-
-                is Annotation.Oval -> {
-                    drawOval(
-                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        topLeft = Offset(annotation.xMin, annotation.yMin),
-                        size = Size(annotation.xMax - annotation.xMin, annotation.yMax - annotation.yMin),
-                        style = Stroke(width = stroke)
-                    )
-                }
-
-                is Annotation.Line -> {
-                    drawLine(
-                        color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        start = annotation.start,
-                        end = annotation.end,
-                        strokeWidth = stroke
-                    )
-                }
-            }
-        }
-
-        /* ----------------------------- */
-        /* Active Drawing Feedback */
-        /* ----------------------------- */
-
-        activeTool?.drawPreview(this)
-    }
-}
-
-@Composable
-private fun AnnotatorToolbar(
-    modifier: Modifier = Modifier,
-    currentMode: CanvasMode,
-    selectedColor: Color,
-    canUndo: Boolean,
-    canRedo: Boolean,
-    onEvent: (CanvasEvent) -> Unit
-) {
-    var shapeMenuExpanded by remember { mutableStateOf(false) }
-    var pathMenuExpanded by remember { mutableStateOf(false) }
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.95f),
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            /* ---------------- Move Section ---------------- */
-            ModeButton(
-                icon = Icons.Default.PanTool,
-                description = "Pan ${ShortcutRegistry.getLabelForMode(CanvasMode.Pan) ?: ""}",
-                isSelected = currentMode is CanvasMode.Pan,
-                onClick = { onEvent(CanvasEvent.ChangeMode(CanvasMode.Pan)) }
-            )
-
-            VerticalDividerLine()
-
-            /* ---------------- Shape Tools ---------------- */
-            Box {
-                ModeButton(
-                    icon = getShapeIcon(currentMode),
-                    description = "Shape Tools",
-                    isSelected = currentMode is CanvasMode.Draw.Shape,
-                    onClick = { shapeMenuExpanded = true }
-                )
-
-                DropdownMenu(
-                    expanded = shapeMenuExpanded,
-                    onDismissRequest = { shapeMenuExpanded = false }
-                ) {
-                    ToolMenuItem(
-                        text = "Rectangle",
-                        mode = CanvasMode.Draw.Shape.Rectangle,
-                        icon = Icons.Default.CropSquare
-                    ) {
-                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Rectangle))
-                        shapeMenuExpanded = false
-                    }
-
-                    ToolMenuItem(
-                        text = "Circle",
-                        mode = CanvasMode.Draw.Shape.Circle,
-                        icon = Icons.Default.RadioButtonUnchecked
-                    ) {
-                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Circle))
-                        shapeMenuExpanded = false
-                    }
-
-                    ToolMenuItem(
-                        text = "Oval",
-                        mode = CanvasMode.Draw.Shape.Oval,
-                        icon = Icons.Default.LensBlur
-                    ) {
-                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Shape.Oval))
-                        shapeMenuExpanded = false
-                    }
-                }
-            }
-
-            /* ---------------- Path Tools ---------------- */
-            Box {
-                ModeButton(
-                    icon = getPathIcon(currentMode),
-                    description = "Path Tools",
-                    isSelected = currentMode is CanvasMode.Draw.Path,
-                    onClick = { pathMenuExpanded = true }
-                )
-
-                DropdownMenu(
-                    expanded = pathMenuExpanded,
-                    onDismissRequest = { pathMenuExpanded = false }
-                ) {
-                    ToolMenuItem(
-                        text = "Polygon",
-                        mode = CanvasMode.Draw.Path.Polygon,
-                        icon = Icons.Default.Polyline
-                    ) {
-                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Path.Polygon))
-                        pathMenuExpanded = false
-                    }
-
-                    ToolMenuItem(
-                        text = "Line",
-                        mode = CanvasMode.Draw.Path.Line,
-                        icon = Icons.Default.HorizontalRule
-                    ) {
-                        onEvent(CanvasEvent.ChangeMode(CanvasMode.Draw.Path.Line))
-                        pathMenuExpanded = false
-                    }
-                }
-            }
-
-            VerticalDividerLine()
-
-            /* ---------------- Color Picker ---------------- */
-            ColorPickerButton(
-                color = selectedColor,
-                onColorSelected = { onEvent(CanvasEvent.ChangeColor(it)) }
-            )
-
-            VerticalDividerLine()
-
-            /* ---------------- Zoom Section ---------------- */
-            IconButton(onClick = { onEvent(CanvasEvent.ZoomIn) }) {
-                Icon(Icons.Default.ZoomIn, contentDescription = "Zoom In (+)")
-            }
-
-            IconButton(onClick = { onEvent(CanvasEvent.ZoomOut) }) {
-                Icon(Icons.Default.ZoomOut, contentDescription = "Zoom Out (-)")
-            }
-
-            IconButton(onClick = { onEvent(CanvasEvent.ResetZoom) }) {
-                Icon(Icons.Default.CenterFocusStrong, contentDescription = "Reset Zoom (0)")
-            }
-
-            VerticalDividerLine()
-
-            /* ---------------- History Section ---------------- */
-            IconButton(
-                onClick = { onEvent(CanvasEvent.Undo) },
-                enabled = canUndo
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo (Ctrl+Z)")
-            }
-
-            IconButton(
-                onClick = { onEvent(CanvasEvent.Redo) },
-                enabled = canRedo
-            ) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo (Ctrl+Y)")
-            }
-
-            IconButton(onClick = { onEvent(CanvasEvent.ClearCanvas) }) {
-                Icon(
-                    Icons.Default.Clear,
-                    contentDescription = "Clear All",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-/* -----------------------------------------------------------
-   Helper Composables & Functions
-   ----------------------------------------------------------- */
-
-@Composable
-private fun ToolMenuItem(
-    text: String,
-    mode: CanvasMode,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    val shortcutLabel = ShortcutRegistry.getLabelForMode(mode) ?: ""
-    DropdownMenuItem(
-        text = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text, modifier = Modifier.weight(1f))
-                if (shortcutLabel.isNotEmpty()) {
-                    Text(
-                        text = shortcutLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
-            }
-        },
-        leadingIcon = { Icon(icon, contentDescription = null) },
-        onClick = onClick
-    )
-}
-
-@Composable
-private fun VerticalDividerLine() {
-    VerticalDivider(
-        modifier = Modifier
-            .size(width = 1.dp, height = 32.dp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-    )
-}
-
-private fun getShapeIcon(mode: CanvasMode): ImageVector {
-    return when (mode) {
-        is CanvasMode.Draw.Shape.Circle -> Icons.Default.RadioButtonUnchecked
-        is CanvasMode.Draw.Shape.Oval -> Icons.Default.LensBlur
-        else -> Icons.Default.CropSquare // Default to Rectangle icon
-    }
-}
-
-private fun getPathIcon(mode: CanvasMode): ImageVector {
-    return when (mode) {
-        is CanvasMode.Draw.Path.Line -> Icons.Default.HorizontalRule
-        else -> Icons.Default.Polyline // Default to Polygon icon
-    }
-}
 
 
-/**
- * Clean wrapper for DropdownMenuItem
- */
-@Composable
-private fun ToolMenuItem(
-    text: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    DropdownMenuItem(
-        text = { Text(text) },
-        leadingIcon = { Icon(icon, null) },
-        onClick = onClick
-    )
-}
-
-@Composable
-private fun ModeButton(
-    icon: ImageVector,
-    description: String,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    FloatingActionButton(
-        onClick = onClick,
-        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-        contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.size(48.dp),
-        elevation = FloatingActionButtonDefaults.elevation(
-            defaultElevation = if (isSelected) 0.dp else 4.dp
-        )
-    ) {
-        Icon(imageVector = icon, contentDescription = description)
-    }
-}
-
-@Composable
-private fun HUDOverlay(
-    modifier: Modifier = Modifier,
-    scale: Float,
-    mode: CanvasMode
-) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.End
-    ) {
-        // --- Scale Indicator ---
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = "${(scale * 100).toInt()}%",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.White
-            )
-        }
-
-        // --- Mode Indicator ---
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .background(
-                    when (mode) {
-                        is CanvasMode.Draw -> MaterialTheme.colorScheme.primary
-                        is CanvasMode.Pan -> MaterialTheme.colorScheme.secondary
-                        is CanvasMode.Edit -> MaterialTheme.colorScheme.tertiary
-                        else -> Color.Gray
-                    }
-                )
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = when (mode) {
-                    is CanvasMode.Pan -> "PANNING"
-                    is CanvasMode.Edit -> "EDITING"
-                    is CanvasMode.Resize -> "RESIZING"
-                    is CanvasMode.Draw -> {
-                        // Get the specific name of the drawing tool
-                        getModeName(mode).uppercase()
-                    }
-                },
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = Color.White
+        if (uiState.isSaving) {
+            SavingIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                title = "Saving...",
             )
         }
     }
 }
 
-/**
- * Helper to get a human-readable name for the current mode
- */
-private fun getModeName(mode: CanvasMode): String {
-    return when (mode) {
-        is CanvasMode.Draw.Shape.Rectangle -> "Rectangle"
-        is CanvasMode.Draw.Shape.Circle -> "Circle"
-        is CanvasMode.Draw.Shape.Oval -> "Oval"
-        is CanvasMode.Draw.Path.Polygon -> "Polygon"
-        is CanvasMode.Draw.Path.Line -> "Line"
-        CanvasMode.Pan -> "Pan"
-        is CanvasMode.Edit -> "Edit"
-        is CanvasMode.Resize -> "Resize"
-    }
-}
 
 @Composable
 private fun EmptyWorkspaceState() {
@@ -623,25 +205,6 @@ private fun EmptyWorkspaceState() {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 16.dp)
         )
-    }
-}
-
-@Composable
-private fun DotGridBackground() {
-    val dotColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val spacing = 20.dp.toPx()
-        val dotRadius = 1.dp.toPx()
-
-        var x = 0f
-        while (x < size.width) {
-            var y = 0f
-            while (y < size.height) {
-                drawCircle(color = dotColor, radius = dotRadius, center = Offset(x, y))
-                y += spacing
-            }
-            x += spacing
-        }
     }
 }
 
