@@ -165,7 +165,7 @@ private fun CanvasInteractionArea(
         modifier = Modifier
             .fillMaxSize()
             .pointerHoverIcon(getCursorForMode(uiState.mode))
-            .pointerInput(uiState.mode, activeTool, uiState.scale, uiState.offset) {
+            .pointerInput(uiState.mode, activeTool) {
 
                 // Helper function to map screen coordinates to the transformed canvas space
                 fun mapToCanvas(screenPos: Offset): Offset {
@@ -178,10 +178,16 @@ private fun CanvasInteractionArea(
                 when (uiState.mode) {
                     /* ------------------ PAN / ZOOM ------------------ */
                     CanvasMode.Pan -> {
-                        this.detectTransformGestures { centroid, pan, zoom, rotation ->
-                            onEvent(CanvasEvent.Zoom(zoom))
-                            onEvent(CanvasEvent.Pan(pan / uiState.scale))
-                            Napier.d("🖱️ Pan: $pan, Zoom: $zoom")
+                        detectTransformGestures { centroid, pan, zoom, _ ->
+                            // 1. Handle Zoom with Centroid
+                            if (zoom != 1f) {
+                                onEvent(CanvasEvent.ZoomAt(zoom, centroid))
+                            }
+
+                            // 2. Handle Pan
+                            if (pan != Offset.Zero) {
+                                onEvent(CanvasEvent.Pan(pan / uiState.scale))
+                            }
                         }
                     }
 

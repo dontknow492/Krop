@@ -15,6 +15,7 @@ sealed interface CanvasEvent {
     // Viewport
     data class Pan(val delta: Offset) : CanvasEvent
     data class Zoom(val scale: Float) : CanvasEvent
+    data class ZoomAt(val zoomFactor: Float, val centroid: Offset): CanvasEvent
     object ZoomIn : CanvasEvent
     object ZoomOut : CanvasEvent
     object ResetZoom : CanvasEvent
