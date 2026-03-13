@@ -14,6 +14,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ghost.krop.BuildKonfig
 import com.ghost.krop.repository.settings.SettingsRepository
 import com.ghost.krop.ui.components.CollapseDirection
 import com.ghost.krop.ui.components.Collapsible
@@ -136,7 +137,7 @@ fun App(
 
     // Pre-loading images for development (only in debug mode)
     LaunchedEffect(Unit) {
-        if (BuildConfig.DEBUG) {
+        if (BuildKonfig.DEBUG) {
             Napier.d("🧪 Development mode: Pre-loading test images")
 
             val testImageDir = Path.of("D:\\Media\\Image")
@@ -354,8 +355,4 @@ fun App(
 
 }
 
-// Add BuildConfig for debug checking (create this file)
-object BuildConfig {
-    const val DEBUG = true // This will be replaced by build system in production
-}
 

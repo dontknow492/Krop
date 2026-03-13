@@ -2,6 +2,7 @@ package com.ghost.krop.logging
 
 import io.github.aakira.napier.Antilog
 import io.github.aakira.napier.LogLevel
+import io.github.aakira.napier.Napier
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -138,4 +139,38 @@ class FileAntilog(
             file.inputStream().copyTo(gzip)
         }
     }
+}
+
+
+// ==================== CALLER INFO UTILITY ====================
+
+fun getCallerInfo(): StackTraceElement? {
+    val stackTrace = Throwable().stackTrace
+
+    // Skip internal frames
+    return stackTrace.firstOrNull { element ->
+        val className = element.className
+        !className.startsWith("io.github.aakira.napier") &&
+                !className.startsWith("com.ghost.krop.utils") &&
+                !className.startsWith("kotlin.coroutines") &&
+                element.lineNumber > 0
+    }
+}
+
+// ==================== EXTENSION FUNCTIONS ====================
+
+inline fun <reified T> T.logDebug(message: String, throwable: Throwable? = null) {
+    Napier.d(message, throwable, T::class.simpleName)
+}
+
+inline fun <reified T> T.logInfo(message: String, throwable: Throwable? = null) {
+    Napier.i(message, throwable, T::class.simpleName)
+}
+
+inline fun <reified T> T.logError(message: String, throwable: Throwable? = null) {
+    Napier.e(message, throwable, T::class.simpleName)
+}
+
+inline fun <reified T> T.logWarn(message: String, throwable: Throwable? = null) {
+    Napier.w(message, throwable, T::class.simpleName)
 }

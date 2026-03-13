@@ -14,7 +14,7 @@ import com.ghost.krop.repository.settings.SettingsEvent
 import com.ghost.krop.repository.settings.SettingsRepository
 import com.ghost.krop.ui.App
 import com.ghost.krop.ui.theme.KropTheme
-import com.ghost.krop.utils.initLogger
+import com.ghost.krop.utils.initLoggerV2
 import com.ghost.krop.viewModel.annotator.AnnotatorViewModel
 import com.ghost.krop.viewModel.annotator.CanvasEvent
 import com.ghost.krop.viewModel.image.ImageEvent
@@ -30,7 +30,7 @@ import org.koin.core.context.startKoin
 
 fun main() = application {
     // Initialize logging
-    initLogger()
+    initLoggerV2()
     Napier.i("🚀 Application starting...")
 
     // Install crash handler
@@ -49,6 +49,7 @@ fun main() = application {
             Napier.d("Coil ImageLoader created")
         }
     }
+
 
     AppWindow()
 }
