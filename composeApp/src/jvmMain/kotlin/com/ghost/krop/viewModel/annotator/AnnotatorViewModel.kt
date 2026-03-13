@@ -4,6 +4,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ghost.krop.core.export.exportAnnotations
 import com.ghost.krop.core.tools.*
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
@@ -11,10 +12,12 @@ import com.ghost.krop.repository.annotations.AnnotationRepository
 import com.ghost.krop.repository.annotations.RepositoryEvent
 import com.ghost.krop.repository.settings.SettingsRepository
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.nio.file.Path
 import kotlin.time.Duration.Companion.seconds
 
@@ -215,6 +218,10 @@ class AnnotatorViewModelOld(
                     annotationRepository.saveNow()
                 }
 
+            }
+
+            is CanvasEvent.ExportAnnotations -> {
+                TODO("Not Yet Implemented")
             }
         }
     }
@@ -626,6 +633,55 @@ class AnnotatorViewModel(
             CanvasEvent.ForceSave -> {
                 viewModelScope.launch {
                     annotationRepository.saveNow()
+                }
+            }
+
+            is CanvasEvent.ExportAnnotations -> {
+
+                viewModelScope.launch {
+
+                    Napier.i(
+                        tag = "Export",
+                        message = "Export started: format=${event.format} path=${event.path}"
+                    )
+
+                    runCatching {
+
+                        withContext(Dispatchers.IO) {
+                            exportAnnotations(
+                                history = _history.value,
+                                format = event.format,
+                                outputDir = event.path
+                            )
+                        }
+
+                    }.onSuccess {
+
+                        Napier.i(
+                            tag = "Export",
+                            message = "Export completed successfully"
+                        )
+
+                        _sideEffects.send(
+                            SideEffect.ShowToast(
+                                "Annotations exported (${event.format.label})"
+                            )
+                        )
+
+                    }.onFailure { error ->
+
+                        Napier.e(
+                            tag = "Export",
+                            throwable = error,
+                            message = "Failed to export annotations"
+                        )
+
+                        _sideEffects.send(
+                            SideEffect.ShowToast(
+                                error.message ?: "Failed to export annotations"
+                            )
+                        )
+                    }
                 }
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
+import com.ghost.krop.models.ExportFormat
 import java.nio.file.Path
 
 sealed interface CanvasEvent {
@@ -45,4 +46,7 @@ sealed interface CanvasEvent {
 
     //ssave
     object ForceSave : CanvasEvent
+
+    //export
+    data class ExportAnnotations(val format: ExportFormat, val path: Path) : CanvasEvent
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.ghost.krop.core.tools.CanvasTool
 import com.ghost.krop.models.Annotation
@@ -75,6 +76,7 @@ fun AnnotatorScreenV2(
             .clipToBounds()
             .background(MaterialTheme.colorScheme.surface)
     ) {
+
         if (uiState.selectedImage == null) {
             EmptyWorkspaceState()
         } else {
@@ -146,6 +148,8 @@ fun AnnotatorScreenV2(
                     onRetry = { /* Retry last operation */ }
                 )
             }
+
+
         }
     }
 }
@@ -480,4 +484,31 @@ private fun EmptyWorkspaceState() {
             )
         }
     }
+}
+
+
+@Preview
+@Composable
+private fun AnnotatorScreenPreview() {
+    AnnotatorScreenV2(
+        uiState = CanvasUiState(
+            selectedImage = java.nio.file.Path.of("/image"),
+            mode = CanvasMode.Pan,
+            scale = 1f,
+            offset = Offset.Zero,
+            color = Color.Red,
+            strokeWidth = 2f,
+            annotationOpacity = 0.8f,
+            hasUnsavedChanges = true,
+            lastSaved = System.currentTimeMillis() - 60000L, // 1 minute ago
+            isLoading = false,
+            isSaving = false,
+            error = "Something went wrong",
+        ),
+        annotations = emptyList(),
+        canUndo = false,
+        canRedo = false,
+        activeTool = null,
+        onEvent = {}
+    )
 }

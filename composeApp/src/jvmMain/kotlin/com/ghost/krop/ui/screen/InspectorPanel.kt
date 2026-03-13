@@ -6,6 +6,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -31,18 +33,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghost.krop.models.Annotation
-import com.ghost.krop.ui.components.CollapseDirection
-import com.ghost.krop.ui.components.Collapsible
-import com.ghost.krop.ui.components.ColorPickerButton
-import com.ghost.krop.ui.components.TogglePosition
+import com.ghost.krop.ui.components.*
 import com.ghost.krop.viewModel.annotator.CanvasEvent
-import com.ghost.krop.viewModel.annotator.CanvasUiState
 import kotlin.math.roundToInt
 
 @Composable
 fun InspectorPanel(
     modifier: Modifier = Modifier,
-    uiState: CanvasUiState,
     annotations: List<Annotation>,
     onEvent: (CanvasEvent) -> Unit,
 ) {
@@ -61,31 +58,39 @@ fun InspectorPanel(
             // Settings Header
 
             // Annotation List
-            LazyColumn(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)
+            val lazyListState = rememberLazyListState()
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
             ) {
-                if (annotations.isEmpty()) {
-                    item {
-                        Text(
-                            text = "No annotations yet.\nDraw on the canvas to add some.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 32.dp)
+                LazyColumn(
+                    state = lazyListState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(16.dp)
+                ) {
+                    if (annotations.isEmpty()) {
+                        item {
+                            Text(
+                                text = "No annotations yet.\nDraw on the canvas to add some.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 32.dp)
+                            )
+                        }
+                    }
+
+                    items(annotations, key = { it.id }) { annotation ->
+                        AnnotationCard(
+                            annotation = annotation,
+                            onUpdate = { onEvent(CanvasEvent.UpdateAnnotation(it)) }, // Make sure to add this event!
+                            onDelete = { onEvent(CanvasEvent.RemoveAnnotation(annotation.id)) }
                         )
                     }
                 }
-
-                items(annotations, key = { it.id }) { annotation ->
-                    AnnotationCard(
-                        annotation = annotation,
-                        onUpdate = { onEvent(CanvasEvent.UpdateAnnotation(it)) }, // Make sure to add this event!
-                        onDelete = { onEvent(CanvasEvent.RemoveAnnotation(annotation.id)) }
-                    )
-                }
+                MyScrollBar(
+                    modifier = Modifier.fillMaxHeight().align(Alignment.CenterEnd),
+                    adaptor = rememberScrollbarAdapter(lazyListState),
+                )
             }
 
             HorizontalDivider(
@@ -95,45 +100,14 @@ fun InspectorPanel(
             )
 
             // Export Section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Export",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { /* TODO: Trigger YOLO Export */ },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text("YOLO")
-                    }
-
-                    Button(
-                        onClick = { /* TODO: Trigger JSON/COCO Export */ },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                        ),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("JSON")
-                    }
+            ExportSection(
+                modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                annotations = annotations,
+                onExport = { format, path ->
+                    onEvent(CanvasEvent.ExportAnnotations(format, path))
                 }
-            }
+            )
+
         }
     }
 }
@@ -961,7 +935,6 @@ private fun InspectorPanelPreview() {
 
     InspectorPanel(
         annotations = sampleAnnotations,
-        uiState = CanvasUiState(),
         onEvent = {}
     )
 

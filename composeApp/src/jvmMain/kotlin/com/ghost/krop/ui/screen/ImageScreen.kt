@@ -4,8 +4,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.LocalScrollbarStyle
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,7 +16,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Upcoming
@@ -128,7 +125,7 @@ fun ImageScreen(
                                     )
                                 }
                             }
-                            ImageScreenScrollBar(
+                            MyScrollBar(
                                 modifier = Modifier.fillMaxWidth(),
                                 adaptor = rememberScrollbarAdapter(lazyGridState)
                             )
@@ -156,7 +153,7 @@ fun ImageScreen(
                                     )
                                 }
                             }
-                            ImageScreenScrollBar(
+                            MyScrollBar(
                                 modifier = Modifier.fillMaxWidth(),
                                 adaptor = rememberScrollbarAdapter(lazyListState)
                             )
@@ -185,27 +182,6 @@ fun ImageScreen(
         )
     }
 
-}
-
-
-@Composable
-private fun ImageScreenScrollBar(
-    modifier: Modifier = Modifier,
-    adaptor: ScrollbarAdapter
-) {
-    Box(modifier = modifier) {
-        VerticalScrollbar(
-            modifier = Modifier.align(Alignment.TopEnd),
-            style = LocalScrollbarStyle.current.copy(
-                thickness = 8.dp,
-                shape = MaterialTheme.shapes.small,
-                hoverDurationMillis = 300,
-                unhoverColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
-                hoverColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.99f)
-            ),
-            adapter = adaptor
-        )
-    }
 }
 
 

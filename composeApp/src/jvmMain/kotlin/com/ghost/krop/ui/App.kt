@@ -30,6 +30,7 @@ import com.ghost.krop.viewModel.image.ImageEvent
 import com.ghost.krop.viewModel.image.ImageSideEffect
 import com.ghost.krop.viewModel.image.ImageViewModel
 import io.github.aakira.napier.Napier
+import kotlinx.coroutines.launch
 import org.koin.compose.viewmodel.koinViewModel
 import java.nio.file.Path
 
@@ -84,45 +85,50 @@ fun App(
 
     // Collect side effects
     LaunchedEffect(Unit) {
-        imageViewModel.sideEffect.collect {
-            when (it) {
-                is ImageSideEffect.ImageSelected -> {
-                    Napier.i("📸 Image selected via side effect: ${it.path?.fileName}")
-                    annotatorViewModel.onEvent(CanvasEvent.SelectImage(it.path))
-                }
 
-                is ImageSideEffect.ShowError -> {
-                    Napier.e("❌ Image error: ${it.message}")
-                    snackbarHostState.showSnackbar("Error: ${it.message}")
-                }
+        launch {
+            imageViewModel.sideEffect.collect {
+                when (it) {
+                    is ImageSideEffect.ImageSelected -> {
+                        Napier.i("📸 Image selected via side effect: ${it.path?.fileName}")
+                        annotatorViewModel.onEvent(CanvasEvent.SelectImage(it.path))
+                    }
 
-                is ImageSideEffect.ShowToast -> {
-                    Napier.d("📢 Toast: ${it.message}")
-                    snackbarHostState.showSnackbar(it.message)
+                    is ImageSideEffect.ShowError -> {
+                        Napier.e("❌ Image error: ${it.message}")
+                        snackbarHostState.showSnackbar("Error: ${it.message}")
+                    }
+
+                    is ImageSideEffect.ShowToast -> {
+                        Napier.d("📢 Toast: ${it.message}")
+                        snackbarHostState.showSnackbar(it.message)
+                    }
                 }
             }
         }
 
-        annotatorViewModel.sideEffects.collect {
-            when (it) {
-                is SideEffect.ShowError -> {
-                    Napier.e("❌ Annotator error: ${it.message}")
-                    snackbarHostState.showSnackbar("Error: ${it.message}")
-                }
+        launch {
+            annotatorViewModel.sideEffects.collect {
+                when (it) {
+                    is SideEffect.ShowError -> {
+                        Napier.e("❌ Annotator error: ${it.message}")
+                        snackbarHostState.showSnackbar("Error: ${it.message}")
+                    }
 
-                SideEffect.ShowNextImage -> {
-                    Napier.d("➡️ Navigating to next image")
-                    imageViewModel.onEvent(ImageEvent.NextImage)
-                }
+                    SideEffect.ShowNextImage -> {
+                        Napier.d("➡️ Navigating to next image")
+                        imageViewModel.onEvent(ImageEvent.NextImage)
+                    }
 
-                SideEffect.ShowPreviousImage -> {
-                    Napier.d("⬅️ Navigating to previous image")
-                    imageViewModel.onEvent(ImageEvent.PreviousImage)
-                }
+                    SideEffect.ShowPreviousImage -> {
+                        Napier.d("⬅️ Navigating to previous image")
+                        imageViewModel.onEvent(ImageEvent.PreviousImage)
+                    }
 
-                is SideEffect.ShowToast -> {
-                    Napier.d("📢 Annotator toast: ${it.message}")
-                    snackbarHostState.showSnackbar(it.message)
+                    is SideEffect.ShowToast -> {
+                        Napier.d("📢 Annotator toast: ${it.message}")
+                        snackbarHostState.showSnackbar(it.message)
+                    }
                 }
             }
         }
@@ -330,7 +336,6 @@ fun App(
                             .padding(horizontal = 4.dp),
                         annotations = annotations,
                         onEvent = annotatorViewModel::onEvent,
-                        uiState = uiState,
                     )
                 }
             }
