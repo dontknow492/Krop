@@ -4,28 +4,27 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import com.ghost.krop.models.Annotation
 import kotlin.math.hypot
-
-//private val showLabel: Boolean,
-//    private val label: String,
-//    private val labelColor: Color,
-//    private val boundingBoxOpacity: Float,
-//    private val boundingBoxStrokeWidth: Float,
+import kotlin.math.min
 
 class CircleTool(
     private var color: Color,
-    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getOpacity: () -> Float,
     private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
 
     private var start by mutableStateOf<Offset?>(null)
     private var current by mutableStateOf<Offset?>(null)
+
+    // ~0.5% of image
+    private val MIN_RADIUS = 0.005f
 
     override fun setColor(color: Color) {
         this.color = color
@@ -41,14 +40,20 @@ class CircleTool(
     }
 
     override fun onPointerUp(position: Offset) {
+
         val s = start ?: return
         val e = current ?: return
 
-        // hypot calculates the exact straight-line distance (radius)
         val radius = hypot(e.x - s.x, e.y - s.y)
 
-        if (radius > 5f) { // Prevent accidental microscopic taps
-            commit(Annotation.Circle(center = s, radius = radius, color = color))
+        if (radius > MIN_RADIUS) {
+            commit(
+                Annotation.Circle(
+                    center = s,
+                    radius = radius,
+                    color = color
+                )
+            )
         }
 
         start = null
@@ -60,17 +65,30 @@ class CircleTool(
         current = null
     }
 
+
+    private fun normalizedRadiusToCanvas(radius: Float, size: Size): Float {
+        // Use smaller dimension to keep circle round
+        return radius * min(size.width, size.height)
+    }
+
     override fun drawPreview(drawScope: DrawScope) {
+
         val s = start ?: return
         val e = current ?: return
-        val radius = hypot(e.x - s.x, e.y - s.y)
+
+        val canvasSize = drawScope.size
+
+        val radiusNormalized = hypot(e.x - s.x, e.y - s.y)
+
+        val centerCanvas = s.toCanvas(canvasSize)
+        val radiusCanvas = normalizedRadiusToCanvas(radiusNormalized, canvasSize)
 
         drawScope.drawCircle(
-            color = color.copy(alpha = getOpacity()), // Live opacity
-            radius = radius,
-            center = s,
+            color = color.copy(alpha = getOpacity()),
+            radius = radiusCanvas,
+            center = centerCanvas,
             style = Stroke(
-                width = getStrokeWidth(), // Live stroke
+                width = getStrokeWidth(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
             )
         )

@@ -68,16 +68,36 @@ class AnnotationManager(
         image: Path,
         annotations: List<Annotation>
     ): Result<Unit> = runCatching {
-        require(annotations.isNotEmpty()) { "Cannot save empty annotations list" }
 
         val file = annotationFile(image)
-        val data = AnnotationFile(image = image, annotations = annotations)
+
+        // If no annotations → delete file
+        if (annotations.isEmpty()) {
+
+            deleteAnnotations(image)
+
+            return@runCatching
+        }
+
+        // Save annotations
+        val data = AnnotationFile(
+            image = image,
+            annotations = annotations
+        )
+
         val jsonString = json.encodeToString(data)
 
         file.writeText(jsonString)
-        Napier.d("Saved ${annotations.size} annotations -> ${file.absolutePath}")
+
+        Napier.d(
+            "Saved ${annotations.size} annotations -> ${file.absolutePath}"
+        )
+
     }.onFailure { error ->
-        Napier.e("Failed to save annotations for ${image.fileName}", error)
+        Napier.e(
+            "Failed to save annotations for ${image.fileName}",
+            error
+        )
     }
 
     /**
@@ -92,16 +112,27 @@ class AnnotationManager(
      * Load annotation file
      */
     fun loadAnnotationFile(image: Path): Result<AnnotationFile> = runCatching {
+
         val file = annotationFile(image)
 
-        require(file.exists()) { "Annotation file not found: ${file.absolutePath}" }
+        // File not created yet (first launch)
+        if (!file.exists()) {
+            Napier.d("No annotation file yet for ${image.fileName}")
+            return@runCatching AnnotationFile(image = image, annotations = emptyList())
+        }
 
         val jsonString = file.readText()
-        require(jsonString.isNotBlank()) { "Annotation file is empty" }
+
+        // Empty file
+        if (jsonString.isBlank()) {
+            Napier.w("Annotation file empty: ${file.absolutePath}")
+            return@runCatching AnnotationFile(image = image, annotations = emptyList())
+        }
 
         json.decodeFromString<AnnotationFile>(jsonString).also {
             Napier.d("Loaded ${it.annotations.size} annotations from ${file.absolutePath}")
         }
+
     }.onFailure { error ->
         Napier.e("Failed to load annotations for ${image.fileName}", error)
     }

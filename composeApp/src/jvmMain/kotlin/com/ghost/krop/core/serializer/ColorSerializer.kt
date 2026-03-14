@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
-import kotlinx.serialization.Serializer
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
@@ -15,7 +14,6 @@ import kotlin.math.min
 
 
 @OptIn(ExperimentalSerializationApi::class)
-@Serializer(forClass = Color::class)
 object ColorSerializer : KSerializer<Color> {
 
     override val descriptor: SerialDescriptor =
@@ -61,7 +59,6 @@ object ColorSerializer : KSerializer<Color> {
 }
 
 // Alternative with more flexible parsing:
-@Serializer(forClass = Color::class)
 object ColorSerializerLenient : KSerializer<Color> {
 
     override val descriptor: SerialDescriptor =
@@ -85,7 +82,7 @@ object ColorSerializerLenient : KSerializer<Color> {
             input.equals("blue", ignoreCase = true) -> 0xFF0000FF.toInt()
             input.equals("black", ignoreCase = true) -> 0xFF000000.toInt()
             input.equals("white", ignoreCase = true) -> 0xFFFFFFFF.toInt()
-            input.equals("transparent", ignoreCase = true) -> 0x00000000.toInt()
+            input.equals("transparent", ignoreCase = true) -> 0x00000000
 
             // RGB/RGBA functions
             input.startsWith("rgb(") -> parseRgbFunction(input)

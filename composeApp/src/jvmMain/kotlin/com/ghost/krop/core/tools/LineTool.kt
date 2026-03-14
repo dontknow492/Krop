@@ -12,7 +12,7 @@ import kotlin.math.hypot
 
 class LineTool(
     private var color: Color,
-    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getOpacity: () -> Float,
     private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
@@ -20,13 +20,16 @@ class LineTool(
     private var start by mutableStateOf<Offset?>(null)
     private var current by mutableStateOf<Offset?>(null)
 
-    override fun onPointerDown(position: Offset) {
-        start = position
-        current = position
-    }
+    // ~0.5% of image diagonal
+    private val MIN_LENGTH = 0.005f
 
     override fun setColor(color: Color) {
         this.color = color
+    }
+
+    override fun onPointerDown(position: Offset) {
+        start = position
+        current = position
     }
 
     override fun onPointerMove(position: Offset) {
@@ -34,13 +37,20 @@ class LineTool(
     }
 
     override fun onPointerUp(position: Offset) {
+
         val s = start ?: return
         val e = current ?: return
 
         val distance = hypot(e.x - s.x, e.y - s.y)
 
-        if (distance > 5f) {
-            commit(Annotation.Line(start = s, end = e, color = color))
+        if (distance > MIN_LENGTH) {
+            commit(
+                Annotation.Line(
+                    start = s,
+                    end = e,
+                    color = color
+                )
+            )
         }
 
         start = null
@@ -53,13 +63,19 @@ class LineTool(
     }
 
     override fun drawPreview(drawScope: DrawScope) {
+
         val s = start ?: return
         val e = current ?: return
 
+        val canvasSize = drawScope.size
+
+        val sCanvas = s.toCanvas(canvasSize)
+        val eCanvas = e.toCanvas(canvasSize)
+
         drawScope.drawLine(
             color = color.copy(alpha = getOpacity()),
-            start = s,
-            end = e,
+            start = sCanvas,
+            end = eCanvas,
             strokeWidth = getStrokeWidth(),
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
         )

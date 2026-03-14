@@ -1,6 +1,7 @@
 package com.ghost.krop.viewModel.annotator
 
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -41,8 +42,8 @@ class AnnotatorViewModel(
         HistoryState<List<Annotation>>(present = emptyList())
     )
 
-    private val imageHistoryCache = mutableMapOf<Path, HistoryState<List<Annotation>>>()
-
+    private val imageHistoryCache =
+        LinkedHashMap<Path, HistoryState<List<Annotation>>>(50, 0.75f, true)
 
     var activeTool: CanvasTool? = null
         private set
@@ -170,6 +171,22 @@ class AnnotatorViewModel(
         }.onEach { _uiState.update { state -> state.copy(labelFontSize = it) } }
             .launchIn(viewModelScope)
 
+        settings.onEach {
+            _uiState.update { state
+                ->
+                state.copy(
+                    searchQuery = it.annotatorSettings.searchQuery,
+                )
+            }
+        }.launchIn(viewModelScope)
+
+        settings.onEach {
+            _uiState.update { state ->
+                state.copy(expandAllInspectorBox = it.annotatorSettings.expandAllInspectorBox)
+            }
+        }.launchIn(viewModelScope)
+
+
         // Watch for repository annotation changes when not in unsaved state
         viewModelScope.launch {
             repositoryState
@@ -190,10 +207,13 @@ class AnnotatorViewModel(
             is CanvasEvent.Pan -> pan(event.delta)
             is CanvasEvent.Zoom -> zoom(event.scale)
             is CanvasEvent.ZoomAt -> handleZoom(event.zoomFactor, event.centroid)
+            is CanvasEvent.ViewportResized -> onViewportResized(event.size)
             is CanvasEvent.ZoomIn -> zoomTo(_uiState.value.scale + ZOOM_STEP)
             is CanvasEvent.ZoomOut -> zoomTo(_uiState.value.scale - ZOOM_STEP)
 
-            CanvasEvent.ResetZoom -> _uiState.update { it.copy(scale = 1f, offset = Offset.Zero) }
+            CanvasEvent.ResetZoom -> _uiState.update {
+                it.copy(scale = 1f, offset = Offset.Zero)
+            }
 
             is CanvasEvent.ChangeMode -> settingsRepository.setTool(event.mode)
 
@@ -211,6 +231,7 @@ class AnnotatorViewModel(
             is CanvasEvent.ChangeColor -> settingsRepository.setBoundingBoxColor(event.color)
 
             is CanvasEvent.SelectImage -> selectImage(event.path)
+            is CanvasEvent.ImageLoaded -> setImageSize(event.size)
 
             is CanvasEvent.UpdateAnnotation -> {
                 val currentList = _history.value.present
@@ -291,6 +312,13 @@ class AnnotatorViewModel(
                     }
                 }
             }
+
+            is CanvasEvent.SearchQuery -> {
+                settingsRepository.setAnnotationSearchQuery(event.query)
+            }
+
+            CanvasEvent.ExpandAll -> settingsRepository.expandAllInspectorBox(true)
+            CanvasEvent.CollapseAll -> settingsRepository.expandAllInspectorBox(false)
         }
     }
 
@@ -299,7 +327,12 @@ class AnnotatorViewModel(
     /* ----------------------------- */
     private fun selectImage(path: Path?) {
         viewModelScope.launch {
-            // Save current image's history to cache before switching
+            // 🔴 Save current image before switching
+            if (annotationRepository.hasUnsavedChanges()) {
+                annotationRepository.saveNow()
+            }
+
+            // Save history cache
             currentHistoryImage?.let { oldPath ->
                 imageHistoryCache[oldPath] = _history.value
             }
@@ -326,13 +359,15 @@ class AnnotatorViewModel(
                         _history.value = HistoryState(present = loadedAnnotations)
                         currentHistoryImage = path
                     }
+                    setImageSize(IntSize.Zero)
                 }.onFailure { error ->
                     Napier.e("Failed to load annotations for $path", error)
-                    _sideEffects.send(SideEffect.ShowError("Failed to load annotations: ${error.message}"))
+//                    _sideEffects.send(SideEffect.ShowError("Failed to load annotations: ${error.message}"))
 
                     // Still allow editing with empty annotations
                     _history.value = HistoryState(present = emptyList())
                     currentHistoryImage = path
+                    setImageSize(IntSize.Zero)
                 }
             } else {
                 // Clear selection
@@ -340,6 +375,13 @@ class AnnotatorViewModel(
                 currentHistoryImage = null
             }
         }
+    }
+
+    private fun setImageSize(imageSize: IntSize = IntSize.Zero) {
+        _uiState.update {
+            it.copy(imageSize = imageSize)
+        }
+        Napier.i("Canvas Image size changed or update to $imageSize for ${uiState.value.selectedImage}")
     }
 
     /* ----------------------------- */
@@ -520,5 +562,14 @@ class AnnotatorViewModel(
             annotationRepository.saveNow()
         }
     }
-}
 
+
+    // Inside ViewModel
+    private fun onViewportResized(newSize: IntSize) {
+        _uiState.update { state ->
+            state.copy(
+                viewportSize = newSize
+            )
+        }
+    }
+}

@@ -8,6 +8,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Label
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -174,7 +176,7 @@ fun ExportDialog(
                     horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.fillMaxWidth()
                 ) {
                     SummaryStat(
-                        label = "Total", value = "${stats.totalAnnotations}", icon = Icons.Outlined.Label
+                        label = "Total", value = "${stats.totalAnnotations}", icon = Icons.AutoMirrored.Outlined.Label
                     )
 
                     SummaryStat(
@@ -474,7 +476,7 @@ fun ExportFormatCard(
                         )
                     ) {
                         Icon(
-                            imageVector = Icons.Outlined.OpenInNew,
+                            imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )

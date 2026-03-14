@@ -4,6 +4,7 @@ package com.ghost.krop.logging
 import com.ghost.krop.BuildKonfig
 import com.ghost.krop.utils.AppDirs
 import io.github.aakira.napier.Napier
+import org.koin.core.component.getScopeId
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -87,7 +88,7 @@ object CrashHandler {
 
             // Basic Info
             appendLine("📅 Time: $timestamp")
-            appendLine("🧵 Thread: ${thread.name} (id=${thread.id})")
+            appendLine("🧵 Thread: ${thread.name} (id=${thread.getScopeId()})")
             appendLine("⚙️ Priority: ${thread.priority}")
             appendLine("👤 Daemon: ${thread.isDaemon}")
             appendLine()
@@ -96,7 +97,6 @@ object CrashHandler {
             appendLine("📦 Version Info:")
             appendLine("   App: ${versionInfo.appVersion}")
             appendLine("   Build: ${versionInfo.buildType}")
-            appendLine("   Commit: ${versionInfo.gitCommit}")
             appendLine()
 
             // System Info
@@ -182,10 +182,6 @@ object CrashHandler {
             appVersion = BuildKonfig.VERSION,
             buildType = if (BuildKonfig.DEBUG) "debug" else "release",
             buildTime = BuildKonfig.BUILD_TIME,
-            gitCommit = BuildKonfig.GIT_COMMIT.takeIf { it != "unknown" } ?: "unknown",
-            gitBranch = BuildKonfig.GIT_BRANCH.takeIf { it != "unknown" } ?: "unknown",
-            gitTag = BuildKonfig.GIT_TAG.takeIf { it != "unknown" } ?: "unknown",
-            gitDirty = BuildKonfig.GIT_DIRTY,
             buildUser = BuildKonfig.BUILD_USER,
             buildHost = BuildKonfig.BUILD_HOST
         )
@@ -211,7 +207,7 @@ object CrashHandler {
         val threads = Thread.getAllStackTraces()
 
         threads.forEach { (thread, stackTrace) ->
-            dump.appendLine("${thread.name} (id=${thread.id}, state=${thread.state})")
+            dump.appendLine("${thread.name} (id=${thread.getScopeId()}, state=${thread.state})")
             stackTrace.forEach { element ->
                 dump.appendLine("    at $element")
             }
@@ -260,10 +256,6 @@ object CrashHandler {
         val appVersion: String,
         val buildType: String,
         val buildTime: String = "unknown",
-        val gitCommit: String = "unknown",
-        val gitBranch: String = "unknown",
-        val gitTag: String = "unknown",
-        val gitDirty: Boolean = false,
         val buildUser: String = "unknown",
         val buildHost: String = "unknown"
     )

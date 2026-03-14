@@ -336,6 +336,9 @@ fun App(
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
                         annotations = annotations,
+                        query = uiState.searchQuery,
+                        expandAll = uiState.expandAllInspectorBox,
+                        imageSize = uiState.imageSize,
                         onEvent = annotatorViewModel::onEvent,
                     )
                 }

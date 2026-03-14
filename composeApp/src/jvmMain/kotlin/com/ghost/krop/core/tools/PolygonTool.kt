@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -15,58 +16,62 @@ import kotlin.math.sqrt
 
 class PolygonTool(
     private var color: Color,
-    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getOpacity: () -> Float,
     private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
 
-    private val path = Path() // Pre-allocate path object
-
+    private val path = Path()
 
     private val points = mutableStateListOf<Offset>()
     private var preview by mutableStateOf<Offset?>(null)
 
-    // How close the finger needs to be to the first point to auto-close the polygon
-    private val CLOSE_THRESHOLD = 50f
+    // normalized threshold (~1% of image)
+    private val CLOSE_THRESHOLD = 0.01f
 
+    private val CLOSE_RADIUS_PX = 20f
+
+    private var lastCanvasSize: Size? = null
 
     override fun setColor(color: Color) {
         this.color = color
-        // Update point color based on new color's luminance
     }
 
     override fun onPointerDown(position: Offset) {
-        // Start showing the preview where the finger touches
         preview = position
     }
 
     override fun onPointerMove(position: Offset) {
-        // Update the preview as the finger drags around
         preview = position
     }
 
     override fun onPointerUp(position: Offset) {
-        // If we already have points, check if we are closing the polygon
+
         if (points.isNotEmpty()) {
+
             val firstPoint = points.first()
+            val canvasSize = lastCanvasSize ?: return
+
+            val normalizedThreshold =
+                CLOSE_RADIUS_PX / minOf(canvasSize.width, canvasSize.height)
+
             val distance = calculateDistance(position, firstPoint)
 
-            // If the user releases the touch near the start point, close it!
-            if (distance < CLOSE_THRESHOLD && points.size >= 2) {
+            if (distance < normalizedThreshold && points.size >= 3) {
+
                 commit(
                     Annotation.Polygon(
                         points = points.toList(),
                         color = color
                     )
                 )
-                // Reset tool for the next drawing
+
                 points.clear()
                 preview = null
                 return
             }
         }
 
-        // Otherwise, the user is just adding a normal vertex. Lock it in.
         points.add(position)
         preview = null
     }
@@ -76,7 +81,6 @@ class PolygonTool(
         preview = null
     }
 
-    // Simple Pythagorean theorem to find distance between two Offsets
     private fun calculateDistance(p1: Offset, p2: Offset): Float {
         val dx = p1.x - p2.x
         val dy = p1.y - p2.y
@@ -84,27 +88,40 @@ class PolygonTool(
     }
 
     override fun drawPreview(drawScope: DrawScope) {
+
+
         if (points.isEmpty() && preview == null) return
 
-        path.reset() // Clear previous frame's path
+        val canvasSize = drawScope.size
+        lastCanvasSize = drawScope.size
+
+        path.reset()
 
         if (points.isNotEmpty()) {
-            path.moveTo(points.first().x, points.first().y)
-            points.drop(1).forEach { path.lineTo(it.x, it.y) }
 
-            // Draw a line to the finger while dragging
+            val first = points.first().toCanvas(canvasSize)
+            path.moveTo(first.x, first.y)
+
+            points.drop(1).forEach {
+                val p = it.toCanvas(canvasSize)
+                path.lineTo(p.x, p.y)
+            }
+
             preview?.let {
-                // UX: If we are close enough to close it, snap the preview to the start!
+
                 val distance = calculateDistance(it, points.first())
-                if (distance < CLOSE_THRESHOLD && points.size >= 2) {
-                    path.lineTo(points.first().x, points.first().y)
-                } else {
-                    path.lineTo(it.x, it.y)
-                }
+
+                val target = if (distance < CLOSE_THRESHOLD && points.size >= 3)
+                    points.first()
+                else
+                    it
+
+                val canvasTarget = target.toCanvas(canvasSize)
+
+                path.lineTo(canvasTarget.x, canvasTarget.y)
             }
         }
 
-        // Draw the connecting lines
         drawScope.drawPath(
             path = path,
             color = color.copy(alpha = getOpacity()),
@@ -114,24 +131,30 @@ class PolygonTool(
             )
         )
 
-
-        // Highlight the starting point "Hit Area"
+        // Draw closing hit area
         if (points.isNotEmpty()) {
+
+            val first = points.first().toCanvas(canvasSize)
+
             drawScope.drawCircle(
-                color = Color.Red, // Contrast color for visibility
-                radius = 12f + getStrokeWidth() * 1.5f, // Fixed small radius for the indicator
-                center = points.first(),
-                alpha = 0.5f,
+                color = Color.Red,
+                radius = 12f + getStrokeWidth() * 1.5f,
+                center = first,
+                alpha = 0.5f
             )
         }
+
+        // Draw vertices
         points.forEach {
+
+            val canvasPoint = it.toCanvas(canvasSize)
+
             drawScope.drawCircle(
                 color,
-                radius = getStrokeWidth() * 1.5f, // Make vertices larger than the line stroke
-                center = it,
-                alpha = getOpacity() + 0.2f // Make vertices slightly more visible than lines
+                radius = getStrokeWidth() * 1.5f,
+                center = canvasPoint,
+                alpha = getOpacity() + 0.2f
             )
         }
     }
-
 }

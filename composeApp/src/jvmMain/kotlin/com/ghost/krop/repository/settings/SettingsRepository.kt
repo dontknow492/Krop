@@ -278,6 +278,26 @@ class SettingsRepository(
         }
     }
 
+    fun setAnnotationSearchQuery(query: String) {
+        updateSettings {
+            it.copy(
+                annotatorSettings = it.annotatorSettings.copy(
+                    searchQuery = query
+                )
+            )
+        }
+    }
+
+    fun expandAllInspectorBox(enabled: Boolean) {
+        updateSettings {
+            it.copy(
+                annotatorSettings = it.annotatorSettings.copy(
+                    expandAllInspectorBox = enabled
+                )
+            )
+        }
+    }
+
     fun setBoundingBoxThickness(thickness: Float) {
         updateSettings {
             it.copy(
@@ -466,6 +486,14 @@ class SettingsRepository(
         if (old.annotatorSettings.tool != new.annotatorSettings.tool) {
             changes["annotator.tool"] = old.annotatorSettings.tool to new.annotatorSettings.tool
         }
+        if (old.annotatorSettings.searchQuery != new.annotatorSettings.searchQuery) {
+            changes["annotator.searchQuery"] = old.annotatorSettings.searchQuery to new.annotatorSettings.searchQuery
+        }
+        if (old.annotatorSettings.expandAllInspectorBox != new.annotatorSettings.expandAllInspectorBox) {
+            changes["annotator.expandAllInspectorBox"] =
+                old.annotatorSettings.expandAllInspectorBox to new.annotatorSettings.expandAllInspectorBox
+        }
+
         if (old.annotatorSettings.showBoundingBoxes != new.annotatorSettings.showBoundingBoxes) {
             changes["annotator.showBoundingBoxes"] =
                 old.annotatorSettings.showBoundingBoxes to new.annotatorSettings.showBoundingBoxes

@@ -39,19 +39,21 @@ class RectangleTool(
     }
 
     override fun onPointerUp(position: Offset) {
-        val s = start ?: return
-        val e = current ?: return
 
-        // Only commit if they actually dragged a measurable distance
-        if (abs(e.x - s.x) > 5f && abs(e.y - s.y) > 5f) {
-            val box = Annotation.BoundingBox(
-                xMin = minOf(s.x, e.x),
-                yMin = minOf(s.y, e.y),
-                xMax = maxOf(s.x, e.x),
-                yMax = maxOf(s.y, e.y),
-                color = color
+        val s = start ?: return
+        current = position
+
+        if (abs(position.x - s.x) > 0.002f && abs(position.y - s.y) > 0.002f) {
+
+            commit(
+                Annotation.BoundingBox(
+                    xMin = minOf(s.x, position.x),
+                    yMin = minOf(s.y, position.y),
+                    xMax = maxOf(s.x, position.x),
+                    yMax = maxOf(s.y, position.y),
+                    color = color
+                )
             )
-            commit(box)
         }
 
         start = null
@@ -64,16 +66,22 @@ class RectangleTool(
     }
 
     override fun drawPreview(drawScope: DrawScope) {
+
         val s = start ?: return
         val e = current ?: return
 
+        val sCanvas = s.toCanvas(drawScope.size)
+        val eCanvas = e.toCanvas(drawScope.size)
+
         drawScope.drawRect(
             color = color.copy(alpha = getOpacity()),
-            topLeft = Offset(minOf(s.x, e.x), minOf(s.y, e.y)),
-            size = Size(abs(e.x - s.x), abs(e.y - s.y)),
+            topLeft = Offset(minOf(sCanvas.x, eCanvas.x), minOf(sCanvas.y, eCanvas.y)),
+            size = Size(
+                abs(eCanvas.x - sCanvas.x),
+                abs(eCanvas.y - sCanvas.y)
+            ),
             style = Stroke(
                 width = getStrokeWidth(),
-                // 20f represents the dash length, 10f represents the gap length
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
             )
         )

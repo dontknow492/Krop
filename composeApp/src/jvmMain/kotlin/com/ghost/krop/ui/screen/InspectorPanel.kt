@@ -30,19 +30,31 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.ui.components.*
+import com.ghost.krop.utils.*
 import com.ghost.krop.viewModel.annotator.CanvasEvent
-import kotlin.math.roundToInt
 
 @Composable
 fun InspectorPanel(
     modifier: Modifier = Modifier,
+    query: String,
+    expandAll: Boolean,
+    imageSize: IntSize = IntSize.Zero, // scaling float to px for better visualization in the inspector
     annotations: List<Annotation>,
     onEvent: (CanvasEvent) -> Unit,
 ) {
+
+    val filteredAnnotations by remember(query, annotations) {
+        derivedStateOf {
+            annotations.filter {
+                it.label.contains(query, ignoreCase = true)
+            }
+        }
+    }
 
     Surface(
         modifier = modifier.fillMaxSize(),
@@ -53,6 +65,14 @@ fun InspectorPanel(
                 Modifier,
                 DividerDefaults.Thickness,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+            )
+
+            InspectorPanelTopBar(
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+                query = query,
+                onSearchQueryChange = { onEvent(CanvasEvent.SearchQuery(it)) },
+                onExpandAll = { onEvent(CanvasEvent.ExpandAll) },
+                onCollapseAll = { onEvent(CanvasEvent.CollapseAll) }
             )
 
             // Settings Header
@@ -79,9 +99,12 @@ fun InspectorPanel(
                         }
                     }
 
-                    items(annotations, key = { it.id }) { annotation ->
+                    items(filteredAnnotations, key = { it.id }) { annotation ->
                         AnnotationCard(
+                            modifier = Modifier.animateItem(),
                             annotation = annotation,
+                            imageSize = imageSize,
+                            forceExpand = expandAll,
                             onUpdate = { onEvent(CanvasEvent.UpdateAnnotation(it)) }, // Make sure to add this event!
                             onDelete = { onEvent(CanvasEvent.RemoveAnnotation(annotation.id)) }
                         )
@@ -113,18 +136,79 @@ fun InspectorPanel(
 }
 
 @Composable
+fun InspectorPanelTopBar(
+    modifier: Modifier = Modifier,
+    query: String,
+    onSearchQueryChange: (String) -> Unit,
+    onExpandAll: () -> Unit,
+    onCollapseAll: () -> Unit,
+) {
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+
+        /* ---------- SEARCH ---------- */
+
+        ModernSearchBar(
+            modifier = Modifier.weight(1f),
+            query = query,
+            onQueryChange = onSearchQueryChange
+        )
+
+        /* ---------- ACTIONS ---------- */
+
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+        ) {
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                IconButton(
+                    onClick = onExpandAll
+                ) {
+                    Icon(
+                        Icons.Default.UnfoldMore,
+                        contentDescription = "Expand All"
+                    )
+                }
+
+                IconButton(
+                    onClick = onCollapseAll
+                ) {
+                    Icon(
+                        Icons.Default.UnfoldLess,
+                        contentDescription = "Collapse All"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AnnotationCard(
+    modifier: Modifier = Modifier,
     annotation: Annotation,
+    forceExpand: Boolean,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit,
     onDelete: () -> Unit
 ) {
 
     val focusManager = LocalFocusManager.current // Accesses the global manager
 
-    var expanded by rememberSaveable(annotation.id) { mutableStateOf(!false) }
+    var expanded by rememberSaveable(annotation.id, forceExpand) { mutableStateOf(forceExpand) }
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(
@@ -231,14 +315,14 @@ private fun AnnotationCard(
                     when (annotation) {
 
                         is Annotation.BoundingBox ->
-                            BoundingBoxEditor(annotation, onUpdate)
+                            BoundingBoxEditor(annotation, imageSize, onUpdate)
 
                         is Annotation.Polygon ->
-                            PolygonEditor(annotation, onUpdate)
+                            PolygonEditor(annotation, imageSize, onUpdate)
 
-                        is Annotation.Circle -> CircleEditor(annotation, onUpdate)
-                        is Annotation.Line -> LineEditor(annotation, onUpdate)
-                        is Annotation.Oval -> OvalEditor(annotation, onUpdate)
+                        is Annotation.Circle -> CircleEditor(annotation, imageSize, onUpdate)
+                        is Annotation.Line -> LineEditor(annotation, imageSize, onUpdate)
+                        is Annotation.Oval -> OvalEditor(annotation, imageSize, onUpdate)
                     }
                 }
             }
@@ -249,13 +333,15 @@ private fun AnnotationCard(
 @Composable
 private fun BoundingBoxEditor(
     box: Annotation.BoundingBox,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit
 ) {
 
-    val x = box.xMin
-    val y = box.yMin
-    val w = box.xMax - box.xMin
-    val h = box.yMax - box.yMin
+    val x = box.xMin.toPxX(imageSize)
+    val y = box.yMin.toPxY(imageSize)
+
+    val w = (box.xMax - box.xMin) * imageSize.width
+    val h = (box.yMax - box.yMin) * imageSize.height
 
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -306,7 +392,19 @@ private fun BoundingBoxEditor(
                         value = x,
                         modifier = Modifier.weight(1f)
                     ) { newX ->
-                        onUpdate(box.copy(xMin = newX, xMax = newX + w))
+
+                        val widthNorm = w / imageSize.width
+                        val nx = newX.fromPxX(imageSize)
+
+                        val clampedX =
+                            nx.coerceIn(0f, 1f - widthNorm)
+
+                        onUpdate(
+                            box.copy(
+                                xMin = clampedX,
+                                xMax = clampedX + widthNorm
+                            )
+                        )
                     }
 
                     CompactNumberField(
@@ -314,11 +412,27 @@ private fun BoundingBoxEditor(
                         value = y,
                         modifier = Modifier.weight(1f)
                     ) { newY ->
-                        onUpdate(box.copy(yMin = newY, yMax = newY + h))
+
+                        val heightNorm = h / imageSize.height
+                        val ny = newY.fromPxY(imageSize)
+
+                        val clampedY =
+                            ny.coerceIn(0f, 1f - heightNorm)
+
+                        onUpdate(
+                            box.copy(
+                                yMin = clampedY,
+                                yMax = clampedY + heightNorm
+                            )
+                        )
                     }
                 }
 
-                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+                HorizontalDivider(
+                    Modifier,
+                    DividerDefaults.Thickness,
+                    DividerDefaults.color
+                )
 
                 /* ---------- SIZE ---------- */
 
@@ -352,7 +466,20 @@ private fun BoundingBoxEditor(
                         value = w,
                         modifier = Modifier.weight(1f)
                     ) { newW ->
-                        onUpdate(box.copy(xMax = box.xMin + newW))
+
+                        val widthNorm =
+                            (newW / imageSize.width)
+                                .coerceIn(0f, 1f)
+
+                        val xMax =
+                            (box.xMin + widthNorm)
+                                .coerceIn(box.xMin, 1f)
+
+                        onUpdate(
+                            box.copy(
+                                xMax = xMax
+                            )
+                        )
                     }
 
                     CompactNumberField(
@@ -360,7 +487,20 @@ private fun BoundingBoxEditor(
                         value = h,
                         modifier = Modifier.weight(1f)
                     ) { newH ->
-                        onUpdate(box.copy(yMax = box.yMin + newH))
+
+                        val heightNorm =
+                            (newH / imageSize.height)
+                                .coerceIn(0f, 1f)
+
+                        val yMax =
+                            (box.yMin + heightNorm)
+                                .coerceIn(box.yMin, 1f)
+
+                        onUpdate(
+                            box.copy(
+                                yMax = yMax
+                            )
+                        )
                     }
                 }
             }
@@ -371,22 +511,30 @@ private fun BoundingBoxEditor(
 @Composable
 private fun PolygonEditor(
     polygon: Annotation.Polygon,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit
 ) {
 
+    val pointsPx = polygon.points.map { it.toPx(imageSize) }
+
     PointListEditor(
-        points = polygon.points,
+        points = pointsPx,
 
         onAdd = {
+            val newPoints = polygon.points + Offset(0.5f, 0.5f) // center
             onUpdate(
-                polygon.copy(points = polygon.points + Offset(0f, 0f))
+                polygon.copy(points = newPoints)
             )
         },
 
-        onUpdatePoint = { index, newPoint ->
+        onUpdatePoint = { index, newPointPx ->
 
             val newPoints = polygon.points.toMutableList()
-            newPoints[index] = newPoint
+
+            val normalized = newPointPx
+                .fromPx(imageSize)
+
+            newPoints[index] = normalized
 
             onUpdate(
                 polygon.copy(points = newPoints)
@@ -401,7 +549,8 @@ private fun PolygonEditor(
             onUpdate(
                 polygon.copy(points = newPoints)
             )
-        }
+        },
+        imageSize = imageSize
     )
 }
 
@@ -409,8 +558,13 @@ private fun PolygonEditor(
 @Composable
 private fun CircleEditor(
     circle: Annotation.Circle,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit
 ) {
+
+    val cx = circle.center.x.toPxX(imageSize)
+    val cy = circle.center.y.toPxY(imageSize)
+    val radiusPx = circle.radius * imageSize.width
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
@@ -423,6 +577,8 @@ private fun CircleEditor(
                 modifier = Modifier.padding(10.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+
+                /* ---------- CENTER ---------- */
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
 
@@ -446,22 +602,44 @@ private fun CircleEditor(
 
                     CompactNumberField(
                         label = "X",
-                        value = circle.center.x,
+                        value = cx,
                         modifier = Modifier.weight(1f)
                     ) { newX ->
-                        onUpdate(circle.copy(center = Offset(newX, circle.center.y)))
+
+                        val nx = newX.fromPxX(imageSize)
+
+                        val clamped =
+                            nx.coerceIn(circle.radius, 1f - circle.radius)
+
+                        onUpdate(
+                            circle.copy(
+                                center = Offset(clamped, circle.center.y)
+                            )
+                        )
                     }
 
                     CompactNumberField(
                         label = "Y",
-                        value = circle.center.y,
+                        value = cy,
                         modifier = Modifier.weight(1f)
                     ) { newY ->
-                        onUpdate(circle.copy(center = Offset(circle.center.x, newY)))
+
+                        val ny = newY.fromPxY(imageSize)
+
+                        val clamped =
+                            ny.coerceIn(circle.radius, 1f - circle.radius)
+
+                        onUpdate(
+                            circle.copy(
+                                center = Offset(circle.center.x, clamped)
+                            )
+                        )
                     }
                 }
 
                 HorizontalDivider()
+
+                /* ---------- RADIUS ---------- */
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
 
@@ -483,9 +661,26 @@ private fun CircleEditor(
 
                 CompactNumberField(
                     label = "Radius",
-                    value = circle.radius
+                    value = radiusPx
                 ) { newR ->
-                    onUpdate(circle.copy(radius = newR))
+
+                    val norm =
+                        (newR / imageSize.width)
+                            .coerceIn(0f, 1f)
+
+                    val maxAllowed =
+                        minOf(
+                            circle.center.x,
+                            1f - circle.center.x,
+                            circle.center.y,
+                            1f - circle.center.y
+                        )
+
+                    val clamped = norm.coerceAtMost(maxAllowed)
+
+                    onUpdate(
+                        circle.copy(radius = clamped)
+                    )
                 }
             }
         }
@@ -496,8 +691,15 @@ private fun CircleEditor(
 @Composable
 private fun LineEditor(
     line: Annotation.Line,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit
 ) {
+
+    val sx = line.start.x.toPxX(imageSize)
+    val sy = line.start.y.toPxY(imageSize)
+
+    val ex = line.end.x.toPxX(imageSize)
+    val ey = line.end.y.toPxY(imageSize)
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
 
@@ -511,6 +713,8 @@ private fun LineEditor(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
 
+                /* ---------- START ---------- */
+
                 Text(
                     "Start",
                     style = MaterialTheme.typography.labelMedium,
@@ -521,22 +725,44 @@ private fun LineEditor(
 
                     CompactNumberField(
                         label = "X",
-                        value = line.start.x,
+                        value = sx,
                         modifier = Modifier.weight(1f)
                     ) { newX ->
-                        onUpdate(line.copy(start = Offset(newX, line.start.y)))
+
+                        val nx = newX.fromPxX(imageSize)
+
+                        onUpdate(
+                            line.copy(
+                                start = Offset(
+                                    nx.coerceIn(0f, 1f),
+                                    line.start.y
+                                )
+                            )
+                        )
                     }
 
                     CompactNumberField(
                         label = "Y",
-                        value = line.start.y,
+                        value = sy,
                         modifier = Modifier.weight(1f)
                     ) { newY ->
-                        onUpdate(line.copy(start = Offset(line.start.x, newY)))
+
+                        val ny = newY.fromPxY(imageSize)
+
+                        onUpdate(
+                            line.copy(
+                                start = Offset(
+                                    line.start.x,
+                                    ny.coerceIn(0f, 1f)
+                                )
+                            )
+                        )
                     }
                 }
 
                 HorizontalDivider()
+
+                /* ---------- END ---------- */
 
                 Text(
                     "End",
@@ -548,18 +774,38 @@ private fun LineEditor(
 
                     CompactNumberField(
                         label = "X",
-                        value = line.end.x,
+                        value = ex,
                         modifier = Modifier.weight(1f)
                     ) { newX ->
-                        onUpdate(line.copy(end = Offset(newX, line.end.y)))
+
+                        val nx = newX.fromPxX(imageSize)
+
+                        onUpdate(
+                            line.copy(
+                                end = Offset(
+                                    nx.coerceIn(0f, 1f),
+                                    line.end.y
+                                )
+                            )
+                        )
                     }
 
                     CompactNumberField(
                         label = "Y",
-                        value = line.end.y,
+                        value = ey,
                         modifier = Modifier.weight(1f)
                     ) { newY ->
-                        onUpdate(line.copy(end = Offset(line.end.x, newY)))
+
+                        val ny = newY.fromPxY(imageSize)
+
+                        onUpdate(
+                            line.copy(
+                                end = Offset(
+                                    line.end.x,
+                                    ny.coerceIn(0f, 1f)
+                                )
+                            )
+                        )
                     }
                 }
             }
@@ -571,13 +817,15 @@ private fun LineEditor(
 @Composable
 private fun OvalEditor(
     oval: Annotation.Oval,
+    imageSize: IntSize,
     onUpdate: (Annotation) -> Unit
 ) {
 
-    val x = oval.xMin
-    val y = oval.yMin
-    val w = oval.xMax - oval.xMin
-    val h = oval.yMax - oval.yMin
+    val x = oval.xMin.toPxX(imageSize)
+    val y = oval.yMin.toPxY(imageSize)
+
+    val w = (oval.xMax - oval.xMin) * imageSize.width
+    val h = (oval.yMax - oval.yMin) * imageSize.height
 
     Column(
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -628,7 +876,19 @@ private fun OvalEditor(
                         value = x,
                         modifier = Modifier.weight(1f)
                     ) { newX ->
-                        onUpdate(oval.copy(xMin = newX, xMax = newX + w))
+
+                        val widthNorm = w / imageSize.width
+                        val nx = newX.fromPxX(imageSize)
+
+                        val clamped =
+                            nx.coerceIn(0f, 1f - widthNorm)
+
+                        onUpdate(
+                            oval.copy(
+                                xMin = clamped,
+                                xMax = clamped + widthNorm
+                            )
+                        )
                     }
 
                     CompactNumberField(
@@ -636,7 +896,19 @@ private fun OvalEditor(
                         value = y,
                         modifier = Modifier.weight(1f)
                     ) { newY ->
-                        onUpdate(oval.copy(yMin = newY, yMax = newY + h))
+
+                        val heightNorm = h / imageSize.height
+                        val ny = newY.fromPxY(imageSize)
+
+                        val clamped =
+                            ny.coerceIn(0f, 1f - heightNorm)
+
+                        onUpdate(
+                            oval.copy(
+                                yMin = clamped,
+                                yMax = clamped + heightNorm
+                            )
+                        )
                     }
                 }
 
@@ -674,7 +946,20 @@ private fun OvalEditor(
                         value = w,
                         modifier = Modifier.weight(1f)
                     ) { newW ->
-                        onUpdate(oval.copy(xMax = oval.xMin + newW))
+
+                        val widthNorm =
+                            (newW / imageSize.width)
+                                .coerceIn(0f, 1f)
+
+                        val xMax =
+                            (oval.xMin + widthNorm)
+                                .coerceIn(oval.xMin, 1f)
+
+                        onUpdate(
+                            oval.copy(
+                                xMax = xMax
+                            )
+                        )
                     }
 
                     CompactNumberField(
@@ -682,7 +967,20 @@ private fun OvalEditor(
                         value = h,
                         modifier = Modifier.weight(1f)
                     ) { newH ->
-                        onUpdate(oval.copy(yMax = oval.yMin + newH))
+
+                        val heightNorm =
+                            (newH / imageSize.height)
+                                .coerceIn(0f, 1f)
+
+                        val yMax =
+                            (oval.yMin + heightNorm)
+                                .coerceIn(oval.yMin, 1f)
+
+                        onUpdate(
+                            oval.copy(
+                                yMax = yMax
+                            )
+                        )
                     }
                 }
             }
@@ -694,6 +992,7 @@ private fun OvalEditor(
 @Composable
 private fun PointListEditor(
     points: List<Offset>,
+    imageSize: IntSize,
     onAdd: () -> Unit,
     onUpdatePoint: (index: Int, Offset) -> Unit,
     onRemovePoint: (index: Int) -> Unit
@@ -801,7 +1100,17 @@ private fun PointListEditor(
                                 value = point.x,
                                 modifier = Modifier.weight(1f)
                             ) { newX ->
-                                onUpdatePoint(index, point.copy(x = newX))
+
+                                val clamped =
+                                    newX.coerceIn(
+                                        0f,
+                                        imageSize.width.toFloat()
+                                    )
+
+                                onUpdatePoint(
+                                    index,
+                                    point.copy(x = clamped)
+                                )
                             }
 
                             Spacer(Modifier.width(6.dp))
@@ -813,7 +1122,17 @@ private fun PointListEditor(
                                 value = point.y,
                                 modifier = Modifier.weight(1f)
                             ) { newY ->
-                                onUpdatePoint(index, point.copy(y = newY))
+
+                                val clamped =
+                                    newY.coerceIn(
+                                        0f,
+                                        imageSize.height.toFloat()
+                                    )
+
+                                onUpdatePoint(
+                                    index,
+                                    point.copy(y = clamped)
+                                )
                             }
 
                             Spacer(Modifier.width(6.dp))
@@ -845,36 +1164,72 @@ private fun CompactNumberField(
     modifier: Modifier = Modifier,
     onValueChange: (Float) -> Unit
 ) {
-    // Display as an integer for cleaner UI, but store as float under the hood
-    var textValue by remember(value) { mutableStateOf(value.roundToInt().toString()) }
+
+    val formatted = remember(value) {
+        if (value.isNaN()) ""
+        else value.toInt().toString()   // clean integer display
+    }
+
+    var textValue by remember { mutableStateOf(formatted) }
+
+    // keep text synced when value changes externally
+    LaunchedEffect(value) {
+        val newText = value.toInt().toString()
+        if (textValue != newText) {
+            textValue = newText
+        }
+    }
 
     Box(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-            .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), RoundedCornerShape(6.dp))
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                RoundedCornerShape(6.dp)
+            )
+            .border(
+                1.dp,
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f),
+                RoundedCornerShape(6.dp)
+            )
             .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
+
         Row(verticalAlignment = Alignment.CenterVertically) {
+
             Text(
                 text = "$label:",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 12.sp,
-//                modifier = Modifier.width(16.dp)
+                fontSize = 12.sp
             )
+
             Spacer(Modifier.width(4.dp))
 
             BasicTextField(
                 value = textValue,
                 onValueChange = { input ->
+
+                    // allow empty while typing
+                    if (input.isEmpty()) {
+                        textValue = input
+                        return@BasicTextField
+                    }
+
+                    // only allow numeric input
+                    if (!input.matches(Regex("-?\\d*\\.?\\d*"))) return@BasicTextField
+
                     textValue = input
-                    // Only trigger update if it's a valid number
-                    input.toFloatOrNull()?.let { onValueChange(it) }
+
+                    input.toFloatOrNull()?.let {
+                        onValueChange(it)
+                    }
                 },
                 textStyle = TextStyle(
                     color = MaterialTheme.colorScheme.onSurface,
                     fontSize = 12.sp
                 ),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
                 singleLine = true,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier.weight(1f)
@@ -935,6 +1290,8 @@ private fun InspectorPanelPreview() {
 
     InspectorPanel(
         annotations = sampleAnnotations,
+        query = "faa",
+        expandAll = true,
         onEvent = {}
     )
 

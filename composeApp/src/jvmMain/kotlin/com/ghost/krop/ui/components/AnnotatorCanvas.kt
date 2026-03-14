@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.ghost.krop.core.tools.CanvasTool
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.viewModel.annotator.CanvasUiState
+import io.github.aakira.napier.Napier
 
 @Composable
 fun AnnotationCanvas(
@@ -19,10 +20,14 @@ fun AnnotationCanvas(
     activeTool: CanvasTool?,
     modifier: Modifier = Modifier,
 ) {
+    Napier.v("Annotation canvas: ${annotations}", tag = "Annotation canvas")
 
     Canvas(modifier = modifier.fillMaxSize()) {
 
-        val stroke = uiState.strokeWidth
+        val stroke = uiState.strokeWidth / uiState.scale
+
+        val w = size.width
+        val h = size.height
 
         /* ----------------------------- */
         /* Draw Finalized Annotations */
@@ -33,13 +38,18 @@ fun AnnotationCanvas(
             when (annotation) {
 
                 is Annotation.BoundingBox -> {
+
+                    Napier.v("Drawing bounding box: ${annotation}", tag = "Annotation canvas")
+
+                    val left = minOf(annotation.xMin, annotation.xMax) * w
+                    val right = maxOf(annotation.xMin, annotation.xMax) * w
+                    val top = minOf(annotation.yMin, annotation.yMax) * h
+                    val bottom = maxOf(annotation.yMin, annotation.yMax) * h
+
                     drawRect(
                         color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        topLeft = Offset(annotation.xMin, annotation.yMin),
-                        size = Size(
-                            annotation.xMax - annotation.xMin,
-                            annotation.yMax - annotation.yMin
-                        ),
+                        topLeft = Offset(left, top),
+                        size = Size(right - left, bottom - top),
                         style = Stroke(width = stroke)
                     )
                 }
@@ -51,10 +61,10 @@ fun AnnotationCanvas(
                         val path = Path().apply {
 
                             val first = annotation.points.first()
-                            moveTo(first.x, first.y)
+                            moveTo(first.x * w, first.y * h)
 
                             annotation.points.drop(1).forEach { point ->
-                                lineTo(point.x, point.y)
+                                lineTo(point.x * w, point.y * h)
                             }
 
                             close()
@@ -69,28 +79,45 @@ fun AnnotationCanvas(
                 }
 
                 is Annotation.Circle -> {
+
                     drawCircle(
                         color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        radius = annotation.radius,
-                        center = annotation.center,
+                        radius = annotation.radius * minOf(w, h),
+                        center = Offset(
+                            annotation.center.x * w,
+                            annotation.center.y * h
+                        ),
                         style = Stroke(width = stroke)
                     )
                 }
 
                 is Annotation.Oval -> {
+
+                    val xMin = annotation.xMin * w
+                    val yMin = annotation.yMin * h
+                    val xMax = annotation.xMax * w
+                    val yMax = annotation.yMax * h
+
                     drawOval(
                         color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        topLeft = Offset(annotation.xMin, annotation.yMin),
-                        size = Size(annotation.xMax - annotation.xMin, annotation.yMax - annotation.yMin),
+                        topLeft = Offset(xMin, yMin),
+                        size = Size(xMax - xMin, yMax - yMin),
                         style = Stroke(width = stroke)
                     )
                 }
 
                 is Annotation.Line -> {
+
                     drawLine(
                         color = annotation.color.copy(alpha = uiState.annotationOpacity),
-                        start = annotation.start,
-                        end = annotation.end,
+                        start = Offset(
+                            annotation.start.x * w,
+                            annotation.start.y * h
+                        ),
+                        end = Offset(
+                            annotation.end.x * w,
+                            annotation.end.y * h
+                        ),
                         strokeWidth = stroke
                     )
                 }

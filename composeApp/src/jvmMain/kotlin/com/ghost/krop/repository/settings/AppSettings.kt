@@ -40,6 +40,8 @@ data class AppSettings(
 @Serializable
 data class AnnotatorSettings(
     val tool: CanvasMode = CanvasMode.Pan,
+    val searchQuery: String = "",
+    val expandAllInspectorBox: Boolean = false,
     val showBoundingBoxes: Boolean = true,
     @Serializable(with = ColorSerializerLenient::class)
     val boundingBoxColor: Color = Color.Green,

@@ -3,6 +3,7 @@ package com.ghost.krop.ui.components
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -162,7 +163,7 @@ fun AnnotatorToolbar(
                 onClick = { onEvent(CanvasEvent.Redo) },
                 enabled = canRedo
             ) {
-                Icon(Icons.Default.Redo, contentDescription = "Redo (Ctrl+Y)")
+                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo (Ctrl+Y)")
             }
 
             IconButton(onClick = { onEvent(CanvasEvent.ClearCanvas) }) {

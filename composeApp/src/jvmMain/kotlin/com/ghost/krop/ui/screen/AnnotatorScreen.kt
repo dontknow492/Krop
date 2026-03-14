@@ -136,7 +136,7 @@ fun AnnotatorScreen(
                 ) {
                     // Image Layer
                     ImageThumbnail(
-                        path = uiState.selectedImage!!,
+                        path = uiState.selectedImage,
                         contentScale = ContentScale.Fit,
                         contentDescription = "Workspace Image",
                         modifier = Modifier.fillMaxSize()

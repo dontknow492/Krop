@@ -1,28 +1,84 @@
-This is a Kotlin Multiplatform project targeting Desktop (JVM).
+# Krop
 
-* [/composeApp](./composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-      folder is the appropriate location.
+Krop is a desktop image annotation tool built with Kotlin Multiplatform and Compose Multiplatform.
+The current target in this repository is JVM desktop.
 
-### Build and Run Desktop (JVM) Application
+## Features
 
-To build and run the development version of the desktop app, use the run configuration from the run widget
-in your IDE’s toolbar or run it directly from the terminal:
+- Browse images and select files/folders for annotation
+- Annotate with multiple canvas tools (for example rectangle, polygon, oval, line, circle)
+- Undo/redo and zoom controls
+- Import/export annotations in common dataset formats (COCO, YOLO, Pascal VOC, JSON)
+- Persist app/session settings between runs
 
-- on macOS/Linux
-  ```shell
-  ./gradlew :composeApp:run
-  ```
-- on Windows
-  ```shell
-  .\gradlew.bat :composeApp:run
-  ```
+## Tech Stack
 
----
+- Kotlin Multiplatform (`jvm()` target currently enabled)
+- Compose Multiplatform Desktop
+- Koin (dependency injection)
+- Kotlinx Serialization
+- Coil 3 (image loading)
+- FileKit (file dialogs)
+- Napier (logging)
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+## Prerequisites
+
+- JDK 17 or newer
+- Gradle wrapper (included)
+- Git (recommended; build metadata in `buildkonfig` reads git info)
+
+## Getting Started
+
+Clone and run from the project root:
+
+```powershell
+Set-Location "D:\Program\KMP\Krop"
+.\gradlew.bat :composeApp:run
+```
+
+## Development Commands
+
+Run tests:
+
+```powershell
+Set-Location "D:\Program\KMP\Krop"
+.\gradlew.bat :composeApp:jvmTest
+```
+
+Build the desktop app:
+
+```powershell
+Set-Location "D:\Program\KMP\Krop"
+.\gradlew.bat :composeApp:build
+```
+
+Create a distributable for the current OS:
+
+```powershell
+Set-Location "D:\Program\KMP\Krop"
+.\gradlew.bat :composeApp:packageDistributionForCurrentOS
+```
+
+Other available packaging tasks include `:composeApp:packageMsi`, `:composeApp:packageDmg`, and `:composeApp:packageDeb`.
+
+## Project Layout
+
+- `composeApp/` - Desktop application module
+- `composeApp/src/jvmMain/kotlin/com/ghost/krop/` - Main application source code
+- `composeApp/src/jvmTest/` - JVM tests
+- `gradle/libs.versions.toml` - Dependency and plugin versions
+
+## Notes
+
+- The project uses `buildkonfig` to capture git/build metadata at configuration time.
+- If you hit configuration-cache errors related to external commands, run Gradle with configuration cache disabled for that invocation:
+
+```powershell
+Set-Location "D:\Program\KMP\Krop"
+.\gradlew.bat :composeApp:run -Dorg.gradle.configuration-cache=false
+```
+
+## License
+
+Add your preferred license information here.
+

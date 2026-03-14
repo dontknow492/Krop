@@ -15,9 +15,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.SubcomposeAsyncImageContent
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import coil3.size.Precision
@@ -87,6 +89,67 @@ fun ImageView(
 fun ImageThumbnail(
     modifier: Modifier = Modifier,
     path: Path,
+    imageWidth: Int,  // Pass the actual image width
+    imageHeight: Int, // Pass the actual image height
+    // ... rest of params
+    contentDescription: String? = null, // in case of null it will be set to path.name
+    loading: @Composable () -> Unit = {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    },
+    error: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.BrokenImage,
+                contentDescription = contentDescription ?: path.name,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    },
+    onImageLoaded: (IntSize) -> Unit,
+) {
+    SubcomposeAsyncImage(
+        model = path.toFile(),
+        contentDescription = path.name,
+        modifier = modifier.size(imageWidth.dp, imageHeight.dp), // Fixed size in the "world"
+        // ...
+        loading = {
+            loading()
+        },
+        error = {
+            error()
+        },
+        success = { state ->
+
+            val image = state.result.image
+
+            val width = image.width
+            val height = image.height
+
+            if (width > 0 && height > 0) {
+                onImageLoaded.invoke(IntSize(width, height))
+            }
+
+            SubcomposeAsyncImageContent()
+        }
+    )
+}
+
+
+@Composable
+fun ImageThumbnail(
+    modifier: Modifier = Modifier,
+    path: Path,
     contentScale: ContentScale = ContentScale.Crop,
     contentDescription: String? = null, // in case of null it will be set to path.name
     loading: @Composable () -> Unit = {
@@ -112,6 +175,7 @@ fun ImageThumbnail(
             )
         }
     },
+    onImageLoaded: ((IntSize) -> Unit)? = null,
 ) {
     SubcomposeAsyncImage(
         model = path.toFile(),
@@ -123,6 +187,19 @@ fun ImageThumbnail(
         },
         error = {
             error()
+        },
+        success = { state ->
+
+            val image = state.result.image
+
+            val width = image.width
+            val height = image.height
+
+            if (width > 0 && height > 0) {
+                onImageLoaded?.invoke(IntSize(width, height))
+            }
+
+            SubcomposeAsyncImageContent()
         }
     )
 }

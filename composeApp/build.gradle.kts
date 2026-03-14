@@ -1,6 +1,5 @@
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
-import java.io.ByteArrayOutputStream
 import java.time.LocalDateTime
 
 plugins {
@@ -68,12 +67,48 @@ kotlin {
 compose.desktop {
     application {
         mainClass = "com.ghost.krop.MainKt"
-
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "com.ghost.krop"
+            packageName = "Krop"
             packageVersion = "1.0.0"
+            description = "Krop Desktop Image Annotation Tool"
+            copyright = "© 2024 Ghost"
+            vendor = "Ghost"
 
+            // This adds the icon to the installer and the installed app
+            // Place an icon.ico (Win) or icon.icns (Mac) in src/jvmMain/resources
+//            iconFile.set(project.file("src/jvmMain/resources/icon.ico"))
+
+            windows {
+                shortcut = true
+                menu = true
+                menuGroup = "Krop"
+                // Keep this UUID constant for future versions of Krop
+                upgradeUuid = "6f8c2b1a-83d4-4e2a-9b1c-3d5f7a2e8c1b"
+                iconFile.set(project.file("src/jvmMain/composeResources/drawable/krop.png"))
+            }
+
+            macOS {
+                bundleID = "com.ghost.krop"
+                dockName = "Krop"
+                signing {
+                    // This is only needed if you have an Apple Developer account
+//                    bundleElementSigning {
+//                        enabled.set(false)
+//                    }
+                }
+                iconFile.set(project.file("src/jvmMain/composeResources/drawable/krop.png"))
+//                iconFile.set(project.file("src/jvmMain/resources/icon.icns"))
+            }
+
+            linux {
+                shortcut = true
+                packageName = "krop" // Linux packages are usually lowercase
+                appRelease = "1"
+                appCategory = "Utility"
+                menuGroup = "Office"
+//                iconFile.set(project.file("src/jvmMain/resources/icon.png"))
+            }
         }
     }
 
@@ -84,68 +119,32 @@ compose.desktop {
 buildkonfig {
     packageName = "com.ghost.krop"
 
-    // Function to run shell commands
-    fun runCommand(command: String): String {
-        return try {
-            val byteOut = ByteArrayOutputStream()
-            project.exec {
-                commandLine = command.split(" ")
-                standardOutput = byteOut
-                errorOutput = byteOut
-                isIgnoreExitValue = true
-            }
-            byteOut.toString(Charsets.UTF_8).trim()
-        } catch (e: Exception) {
-            "unknown"
-        }
-    }
-
-    // Get Git information
-    val gitCommit = runCommand("git rev-parse --short HEAD")
-    val gitBranch = runCommand("git rev-parse --abbrev-ref HEAD")
-    val gitTag = runCommand("git describe --tags --always")
-    val gitCommitCount = runCommand("git rev-list --count HEAD")
-    val gitCommitTime = runCommand("git show -s --format=%ci HEAD")
-    val isDirty = runCommand("git status --porcelain").isNotEmpty()
-
     // Get build time
     val buildTime = System.currentTimeMillis().toString()
     val buildDate = LocalDateTime.now().toString()
-
-    // Get user/host info (optional)
     val userName = System.getProperty("user.name", "unknown")
-    val hostName = runCommand("hostname").ifEmpty { "unknown" }
 
     defaultConfigs {
-        // Static fields
         buildConfigField(Type.STRING, "APP_NAME", "Krop")
         buildConfigField(Type.STRING, "VERSION", "1.0.0")
-
-        // Git information
-        buildConfigField(Type.STRING, "GIT_COMMIT", "\"$gitCommit\"")
-        buildConfigField(Type.STRING, "GIT_BRANCH", "\"$gitBranch\"")
-        buildConfigField(Type.STRING, "GIT_TAG", "\"$gitTag\"")
-        buildConfigField(Type.STRING, "GIT_COMMIT_COUNT", "\"$gitCommitCount\"")
-        buildConfigField(Type.STRING, "GIT_COMMIT_TIME", "\"$gitCommitTime\"")
-        buildConfigField(Type.BOOLEAN, "GIT_DIRTY", if (isDirty) "true" else "false")
 
         // Build information
         buildConfigField(Type.STRING, "BUILD_TIME", "\"$buildTime\"")
         buildConfigField(Type.STRING, "BUILD_DATE", "\"$buildDate\"")
         buildConfigField(Type.STRING, "BUILD_USER", "\"$userName\"")
-        buildConfigField(Type.STRING, "BUILD_HOST", "\"$hostName\"")
 
-        buildConfigField(Type.BOOLEAN, "DEBUG", "false")  // Default value
-        buildConfigField(Type.STRING, "BUILD_TYPE", "\"unknown\"")  // Default value
+        // Changed BUILD_HOST to a static string since we removed runCommand
+        buildConfigField(Type.STRING, "BUILD_HOST", "\"unknown\"")
 
-        // Target-specific configs
+        buildConfigField(Type.BOOLEAN, "DEBUG", "true")
+        buildConfigField(Type.STRING, "BUILD_TYPE", "\"unknown\"")
+
         targetConfigs {
             create("debug") {
                 buildConfigField(Type.BOOLEAN, "DEBUG", "true")
                 buildConfigField(Type.STRING, "BUILD_TYPE", "\"debug\"")
                 buildConfigField(Type.BOOLEAN, "LOGGING_ENABLED", "true")
             }
-
             create("release") {
                 buildConfigField(Type.BOOLEAN, "DEBUG", "false")
                 buildConfigField(Type.STRING, "BUILD_TYPE", "\"release\"")

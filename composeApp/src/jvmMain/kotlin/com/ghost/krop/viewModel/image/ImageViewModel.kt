@@ -26,15 +26,24 @@ class ImageViewModel(
 
     // --- Private Mutable States ---
     private val _rawImages = MutableStateFlow<List<Path>>(emptyList())
-    private val _currentDir = MutableStateFlow<LoadFiles?>(null)
+    private val _currentDir =
+        settings.map { it.sessionState.files }.stateIn(viewModelScope, SharingStarted.Lazily, null)
     private val _isLoading = MutableStateFlow(false)
     private val _error = MutableStateFlow<String?>(null)
-    private val _selectedImage = MutableStateFlow<Path?>(null)
+    private val _selectedImage = settings.map { it.sessionState.lastFocusedImage }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     private val _searchQuery = MutableStateFlow("")
     private val _sortType = MutableStateFlow(ImageSort.NAME)
     private val _sortDirection = MutableStateFlow(SortDirection.ASCENDING)
     private val _viewMode = MutableStateFlow(ImageCardType.POSTER)
-    private val _directorySettings = MutableStateFlow(DirectorySettings())
+    private val _directorySettings = settings.map {
+        DirectorySettings(
+            isRecursive = it.sessionState.recursiveLoad,
+            maxDepth = it.sessionState.maxRecursionDepth,
+            includeHiddenFiles = it.sessionState.includeHiddenFiles
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DirectorySettings())
+
 
     private val _sideEffect = Channel<ImageSideEffect>()
     val sideEffect = _sideEffect.receiveAsFlow()
@@ -120,14 +129,6 @@ class ImageViewModel(
 
     init {
         // Restore last directory
-        settings
-            .map { it.sessionState.files }
-            .filterNotNull()
-            .take(1)
-            .onEach { files ->
-                _currentDir.value = files
-            }
-            .launchIn(viewModelScope)
 
 
         // Automatically trigger reload if directory or settings change
@@ -149,30 +150,23 @@ class ImageViewModel(
     fun onEvent(event: ImageEvent) {
         when (event) {
             is ImageEvent.LoadImages -> {
-                _currentDir.update {
+                setCurrentDir(
                     LoadFiles(
                         folders = listOf(event.directory),
                         files = emptyList()
                     )
-                }
-
-                // Persist session
-                settingsRepository.updateSettings {
-                    it.copy(
-                        sessionState = it.sessionState.copy(
-                            files = _currentDir.value
-                        )
-                    )
-                }
+                )
             }
 
-            is ImageEvent.SelectImage -> {
-                _selectedImage.update { event.path }
-            }
+            is ImageEvent.SelectImage -> setSelectedImage(event.path)
 
             is ImageEvent.Search -> _searchQuery.update { event.query }
             is ImageEvent.ChangeViewMode -> _viewMode.value = event.viewMode
-            is ImageEvent.DirectorySettingChange -> _directorySettings.update { event.setting }
+            is ImageEvent.DirectorySettingChange -> {
+                settingsRepository.setMaxRecursionDepth(event.setting.maxDepth)
+                settingsRepository.setRecursiveLoad(event.setting.isRecursive)
+            }
+
             is ImageEvent.DeleteImage -> deleteImage(event.path)
             is ImageEvent.DeleteImages -> deleteImages(event.paths)
             is ImageEvent.Sort -> {
@@ -203,9 +197,8 @@ class ImageViewModel(
                     folders = event.folders,
                     files = event.files
                 )
-                _currentDir.update {
-                    files
-                }
+                setCurrentDir(files)
+
                 // Persist session
                 settingsRepository.updateSettings {
                     it.copy(
@@ -226,7 +219,7 @@ class ImageViewModel(
                     val index = list.indexOf(current)
 
                     if (index != -1 && index < list.lastIndex) {
-                        _selectedImage.update { list[index + 1] }
+                        setSelectedImage(list[index + 1])
                     }
                 }
             }
@@ -241,7 +234,7 @@ class ImageViewModel(
                     val index = list.indexOf(current)
 
                     if (index > 0) {
-                        _selectedImage.update { list[index - 1] }
+                        setSelectedImage(list[index - 1])
                     }
                 }
             }
@@ -280,22 +273,36 @@ class ImageViewModel(
     private fun clearWorkspace() {
         imageLoadJob?.cancel()
         _rawImages.value = emptyList()
-        _currentDir.value = null
-        _selectedImage.value = null
+        setCurrentDir(null)
+        setSelectedImage(null)
         _error.value = null
     }
 
     private fun deleteImage(path: Path) {
         _rawImages.update { list -> list.filterNot { it == path } }
-        if (_selectedImage.value == path) _selectedImage.value = null
+        if (_selectedImage.value == path) setSelectedImage(null)
         Napier.v { "Removed image from workspace: $path" }
     }
 
     private fun deleteImages(paths: List<Path>) {
         val pathSet = paths.toSet() // O(1) lookups for filtering
         _rawImages.update { list -> list.filterNot { it in pathSet } }
-        if (_selectedImage.value in pathSet) _selectedImage.value = null
+        if (_selectedImage.value in pathSet) setSelectedImage(null)
         Napier.v { "Removed ${paths.size} images from workspace" }
+    }
+
+    private fun setSelectedImage(path: Path?) {
+        settingsRepository.setLastFocusedImage(path)
+    }
+
+    private fun setCurrentDir(files: LoadFiles?) {
+        settingsRepository.updateSettings {
+            it.copy(
+                sessionState = it.sessionState.copy(
+                    files = files
+                )
+            )
+        }
     }
 }
 

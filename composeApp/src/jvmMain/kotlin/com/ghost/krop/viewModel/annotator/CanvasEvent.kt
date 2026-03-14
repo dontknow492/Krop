@@ -3,6 +3,7 @@ package com.ghost.krop.viewModel.annotator
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
 import com.ghost.krop.models.ExportFormat
@@ -11,11 +12,13 @@ import java.nio.file.Path
 sealed interface CanvasEvent {
     //
     data class SelectImage(val path: Path?) : CanvasEvent
+    data class ImageLoaded(val size: IntSize) : CanvasEvent
 
     // Viewport
     data class Pan(val delta: Offset) : CanvasEvent
     data class Zoom(val scale: Float) : CanvasEvent
-    data class ZoomAt(val zoomFactor: Float, val centroid: Offset): CanvasEvent
+    data class ZoomAt(val zoomFactor: Float, val centroid: Offset) : CanvasEvent
+    data class ViewportResized(val size: IntSize) : CanvasEvent
     object ZoomIn : CanvasEvent
     object ZoomOut : CanvasEvent
     object ResetZoom : CanvasEvent
@@ -26,6 +29,11 @@ sealed interface CanvasEvent {
     data class RemoveAnnotation(val id: String) : CanvasEvent
     data class UpdateAnnotation(val annotation: Annotation) : CanvasEvent
     data object ClearCanvas : CanvasEvent
+
+    //
+    data class SearchQuery(val query: String) : CanvasEvent
+    object ExpandAll : CanvasEvent
+    object CollapseAll : CanvasEvent
 
     //style
     data class ChangeStrokeWidth(val width: Float) : CanvasEvent

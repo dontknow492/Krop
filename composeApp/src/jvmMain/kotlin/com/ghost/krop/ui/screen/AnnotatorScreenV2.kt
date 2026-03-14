@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -17,15 +18,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import com.ghost.krop.core.tools.CanvasTool
 import com.ghost.krop.models.Annotation
 import com.ghost.krop.models.CanvasMode
@@ -80,12 +87,12 @@ fun AnnotatorScreenV2(
         if (uiState.selectedImage == null) {
             EmptyWorkspaceState()
         } else {
-            // Interactive Canvas Area
-            CanvasInteractionArea(
+
+            CanvasInteractionAreaDemo(
                 uiState = uiState,
-                activeTool = activeTool,
                 annotations = annotations,
-                onEvent = onEvent
+                onEvent = onEvent,
+                activeTool = activeTool,
             )
 
             // UI Overlay: Floating Toolbar (Bottom Center)
@@ -161,6 +168,9 @@ private fun CanvasInteractionArea(
     activeTool: CanvasTool?,
     onEvent: (CanvasEvent) -> Unit
 ) {
+
+    uiState.imageSize
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -237,25 +247,27 @@ private fun CanvasInteractionArea(
     ) {
         // Background Grid
         DotGridBackground()
-
         // Transformed Layer (Image + Annotations)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer(
-                    scaleX = uiState.scale,
-                    scaleY = uiState.scale,
-                    translationX = uiState.offset.x * uiState.scale,
-                    translationY = uiState.offset.y * uiState.scale,
+                .graphicsLayer {
+                    scaleX = uiState.scale
+                    scaleY = uiState.scale
+                    translationX = uiState.offset.x * uiState.scale
+                    translationY = uiState.offset.y * uiState.scale
                     transformOrigin = TransformOrigin(0f, 0f)
-                )
+                }
+//
         ) {
             // Image Layer
             ImageThumbnail(
                 path = uiState.selectedImage!!,
                 contentScale = ContentScale.Fit,
-                contentDescription = "Workspace Image",
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
+                onImageLoaded = {
+                    onEvent(CanvasEvent.ImageLoaded(it))
+                }
             )
 
             // Annotation Layer
@@ -268,6 +280,218 @@ private fun CanvasInteractionArea(
         }
     }
 }
+
+
+fun calculateImageDrawRect(
+    containerSize: IntSize,
+    imageSize: IntSize,
+    contentScale: ContentScale,
+    alignment: Alignment = Alignment.Center
+): Rect {
+
+    val scale = contentScale.computeScaleFactor(
+        srcSize = Size(imageSize.width.toFloat(), imageSize.height.toFloat()),
+        dstSize = Size(containerSize.width.toFloat(), containerSize.height.toFloat())
+    )
+
+    val scaledWidth = imageSize.width * scale.scaleX
+    val scaledHeight = imageSize.height * scale.scaleY
+
+    val alignedOffset = alignment.align(
+        size = IntSize(scaledWidth.toInt(), scaledHeight.toInt()),
+        space = containerSize,
+        layoutDirection = LayoutDirection.Ltr
+    )
+
+    return Rect(
+        offset = Offset(alignedOffset.x.toFloat(), alignedOffset.y.toFloat()),
+        size = Size(scaledWidth, scaledHeight)
+    )
+}
+
+
+@Composable
+private fun CanvasInteractionAreaV2(
+    uiState: CanvasUiState,
+    annotations: List<Annotation>,
+    activeTool: CanvasTool?,
+    onEvent: (CanvasEvent) -> Unit
+) {
+
+    var containerSize = uiState.viewportSize
+
+    val imageSize = uiState.imageSize
+
+    // Calculate where the image actually sits inside the container
+    val imageRect = remember(containerSize, imageSize) {
+
+        if (containerSize == IntSize.Zero || imageSize == IntSize.Zero) {
+            Rect.Zero
+        } else {
+
+            val container = containerSize.toSize()
+
+            val scale = ContentScale.Fit.computeScaleFactor(
+                srcSize = Size(imageSize.width.toFloat(), imageSize.height.toFloat()),
+                dstSize = container
+            )
+
+            val fittedSize = Size(
+                imageSize.width * scale.scaleX,
+                imageSize.height * scale.scaleY
+            )
+
+            val dx = (container.width - fittedSize.width) / 2f
+            val dy = (container.height - fittedSize.height) / 2f
+
+            Rect(Offset(dx, dy), fittedSize)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onSizeChanged { onEvent(CanvasEvent.ViewportResized(it)) }
+            .pointerHoverIcon(getCursorForMode(uiState.mode))
+            .pointerInput(uiState.mode, activeTool, imageRect) {
+
+                fun isInsideImage(pos: Offset): Boolean {
+                    return imageRect.contains(pos)
+                }
+
+                fun mapToCanvas(screenPos: Offset): Offset {
+
+                    // Remove viewport transform
+                    val rawX = (screenPos.x / uiState.scale) - uiState.offset.x
+                    val rawY = (screenPos.y / uiState.scale) - uiState.offset.y
+
+                    return Offset(rawX, rawY)
+                }
+
+                when (uiState.mode) {
+
+                    /* ---------------- PAN / ZOOM ---------------- */
+
+                    CanvasMode.Pan -> {
+
+                        detectTransformGestures { centroid, pan, zoom, _ ->
+
+                            if (zoom != 1f) {
+                                onEvent(CanvasEvent.ZoomAt(zoom, centroid))
+                            }
+
+                            if (pan != Offset.Zero) {
+                                onEvent(CanvasEvent.Pan(pan / uiState.scale))
+                            }
+                        }
+                    }
+
+                    /* ---------------- DRAW ---------------- */
+
+                    is CanvasMode.Draw -> {
+
+                        awaitEachGesture {
+
+                            val down = awaitFirstDown(requireUnconsumed = false)
+
+                            if (!isInsideImage(down.position)) {
+                                Napier.d("Pointer outside image ignored")
+                                return@awaitEachGesture
+                            }
+
+                            val start = mapToCanvas(down.position)
+
+                            activeTool?.onPointerDown(start)
+
+                            do {
+
+                                val event = awaitPointerEvent()
+                                val change = event.changes.first()
+
+                                if (change.pressed) {
+
+                                    if (!isInsideImage(change.position)) {
+                                        change.consume()
+                                        continue
+                                    }
+
+                                    val pos = mapToCanvas(change.position)
+
+                                    activeTool?.onPointerMove(pos)
+
+                                } else {
+
+                                    val pos = mapToCanvas(change.position)
+
+                                    activeTool?.onPointerUp(pos)
+                                }
+
+                                change.consume()
+
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+
+                    /* ---------------- EDIT ---------------- */
+
+                    CanvasMode.Edit -> {
+
+                        detectTapGestures(
+
+                            onTap = { offset ->
+
+                                if (!isInsideImage(offset)) return@detectTapGestures
+
+                                val canvasPos = mapToCanvas(offset)
+
+                                Napier.d("Tap at canvas: $canvasPos")
+
+                                // TODO selection logic
+                            }
+                        )
+                    }
+
+                    else -> Unit
+                }
+            }
+    ) {
+
+        DotGridBackground()
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+
+                    scaleX = uiState.scale
+                    scaleY = uiState.scale
+
+                    translationX = uiState.offset.x * uiState.scale
+                    translationY = uiState.offset.y * uiState.scale
+
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+        ) {
+
+            ImageThumbnail(
+                path = uiState.selectedImage!!,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+                onImageLoaded = {
+                    onEvent(CanvasEvent.ImageLoaded(it))
+                }
+            )
+
+            AnnotationCanvas(
+                annotations = annotations,
+                uiState = uiState,
+                activeTool = activeTool,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+    }
+}
+
 
 @Composable
 private fun StatusIndicators(
@@ -294,11 +518,16 @@ private fun StatusIndicators(
                     text = path.fileName.toString(),
                     maxLength = 30
                 )
+                StatusRow(
+                    icon = Icons.Default.PhotoSizeSelectActual,
+                    text = "${uiState.imageSize.width} x ${uiState.imageSize.height} px",
+                    maxLength = 20
+                )
             }
 
             // Annotation count
             StatusRow(
-                icon = Icons.Default.Label,
+                icon = Icons.AutoMirrored.Filled.Label,
                 text = "$annotationsCount annotation${if (annotationsCount != 1) "s" else ""}"
             )
 

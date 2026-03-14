@@ -14,7 +14,7 @@ import kotlin.math.abs
 
 class OvalTool(
     private var color: Color,
-    private val getOpacity: () -> Float,      // Dynamic getter
+    private val getOpacity: () -> Float,
     private val getStrokeWidth: () -> Float,
     private val commit: (Annotation) -> Unit
 ) : CanvasTool {
@@ -22,13 +22,16 @@ class OvalTool(
     private var start by mutableStateOf<Offset?>(null)
     private var current by mutableStateOf<Offset?>(null)
 
-    override fun onPointerDown(position: Offset) {
-        start = position
-        current = position
-    }
+    // ~0.5% of image size
+    private val MIN_DRAG = 0.005f
 
     override fun setColor(color: Color) {
         this.color = color
+    }
+
+    override fun onPointerDown(position: Offset) {
+        start = position
+        current = position
     }
 
     override fun onPointerMove(position: Offset) {
@@ -36,10 +39,11 @@ class OvalTool(
     }
 
     override fun onPointerUp(position: Offset) {
+
         val s = start ?: return
         val e = current ?: return
 
-        if (abs(e.x - s.x) > 5f && abs(e.y - s.y) > 5f) {
+        if (abs(e.x - s.x) > MIN_DRAG && abs(e.y - s.y) > MIN_DRAG) {
             commit(
                 Annotation.Oval(
                     xMin = minOf(s.x, e.x),
@@ -61,13 +65,25 @@ class OvalTool(
     }
 
     override fun drawPreview(drawScope: DrawScope) {
+
         val s = start ?: return
         val e = current ?: return
 
+        val canvasSize = drawScope.size
+
+        val sCanvas = s.toCanvas(canvasSize)
+        val eCanvas = e.toCanvas(canvasSize)
+
         drawScope.drawOval(
             color = color.copy(alpha = getOpacity()),
-            topLeft = Offset(minOf(s.x, e.x), minOf(s.y, e.y)),
-            size = Size(abs(e.x - s.x), abs(e.y - s.y)),
+            topLeft = Offset(
+                minOf(sCanvas.x, eCanvas.x),
+                minOf(sCanvas.y, eCanvas.y)
+            ),
+            size = Size(
+                abs(eCanvas.x - sCanvas.x),
+                abs(eCanvas.y - sCanvas.y)
+            ),
             style = Stroke(
                 width = getStrokeWidth(),
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(20f, 10f), 0f)
