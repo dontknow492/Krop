@@ -1,38 +1,62 @@
-name: Build Krop Desktop
+name: Build & Release Krop Desktop
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    tags:
+      - "v*"   # example: v1.0.0
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup JDK
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
+          cache: gradle
 
-      - name: Grant Gradle Permission
+      - name: Grant Gradle permission
+        if: runner.os != 'Windows'
         run: chmod +x gradlew
 
-      - name: Build Project
-        run: ./gradlew build
-
-      - name: Package Desktop App
+      - name: Build installers
         run: ./gradlew packageDistributionForCurrentOS
 
-      - name: Upload Desktop Artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: krop-desktop
+          name: krop-${{ runner.os }}
           path: |
-            **/build/compose/binaries/**
+            **/build/compose/binaries/**/*.dmg
+            **/build/compose/binaries/**/*.msi
+            **/build/compose/binaries/**/*.deb
+
+  release:
+
+    needs: build
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
