@@ -1,0 +1,38 @@
+name: Build Krop Desktop
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Grant Gradle Permission
+        run: chmod +x gradlew
+
+      - name: Build Project
+        run: ./gradlew build
+
+      - name: Package Desktop App
+        run: ./gradlew packageDistributionForCurrentOS
+
+      - name: Upload Desktop Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: krop-desktop
+          path: |
+            **/build/compose/binaries/**
